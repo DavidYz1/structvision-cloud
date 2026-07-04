@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+
+# Conda / venv
+.venv/
+env/
+.env
+
+# VSCode
+.vscode/
+
+# Uploaded / generated images
+backend/app/uploads/*
+backend/app/outputs/*
+
+# keep folder
+!backend/app/uploads/.gitkeep
+!backend/app/outputs/.gitkeep
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
