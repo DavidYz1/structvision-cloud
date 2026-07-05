@@ -89,8 +89,8 @@ function App() {
           {errorMsg && <p className="error">{errorMsg}</p>}
 
           <div className="info-box">
-            <p><strong>当前模型：<strong>MAMT2 / Mask R-CNN</p>
-            <p><strong>输出内容：<strong>类别、置信度、bbox、mask、结果图</p>
+            <p><strong>当前模型：</strong>MAMT2 / Mask R-CNN</p>
+            <p><strong>输出内容：</strong>类别、置信度、bbox、mask、结果图</p>
           </div>
         </section>
 
