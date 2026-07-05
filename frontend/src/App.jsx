@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import "./App.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
@@ -58,12 +58,23 @@ function App() {
     ? `${API_BASE_URL}${result.result_url}`
     : "";
 
+  const formatLabels = (labels = []) => {
+    if (!labels.length) return "";
+    const uniqueLabels = [...new Set(labels)];
+    if (uniqueLabels.length === 1 && labels.length > 1) {
+      return `${uniqueLabels[0]} × ${labels.length}`;
+    }
+    return labels.join(", ");
+  };
+
   return (
     <div className="page">
       <header className="header">
         <div>
           <h1>
-            <span className="logo-mark">AI</span>
+            <span className="logo-mark">
+              <img src="/tongji-logo.png" alt="Tongji University" />
+            </span>
             MAMT2 Cloud SHM
           </h1>
           <p>结构表观病害检测与实例分割云原生平台</p>
@@ -129,7 +140,7 @@ function App() {
 
               <div className="result-row">
                 <span>类别</span>
-                <strong>{result.labels?.join(", ")}</strong>
+                <strong>{formatLabels(result.labels)}</strong>
               </div>
 
               <div className="result-row">
@@ -137,9 +148,10 @@ function App() {
                 <strong>{result.scores?.map((s) => Number(s).toFixed(2)).join(", ")}</strong>
               </div>
 
-              <div className="json-box">
+              <details className="debug-details">
+                <summary>查看原始推理结果 JSON</summary>
                 <pre>{JSON.stringify(result, null, 2)}</pre>
-              </div>
+              </details>
             </div>
           ) : (
             <div className="placeholder">暂无结果</div>

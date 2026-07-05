@@ -1,0 +1,26 @@
+﻿name: mamt2-worker
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  # Pin PyTorch/CUDA packages later according to the target Ubuntu GPU runtime.
+  # Example choices may include pytorch, torchvision, pytorch-cuda, or CPU-only builds.
+  # Install Detectron2 separately after choosing the matching PyTorch/CUDA versions.
+  - pip:
+      - fastapi
+      - uvicorn
+      - python-multipart
+      - numpy
+      - pillow
+      - opencv-python
+      - timm
+      - pycocotools
+      - fvcore
+      - iopath
+      - yacs
+      - omegaconf
+      - cloudpickle

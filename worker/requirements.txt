@@ -1,0 +1,19 @@
+﻿# Windows local development currently uses the existing General conda environment.
+# This file is mainly a dependency note before Dockerizing the MAMT2 Worker.
+# detectron2 installation is tightly coupled with PyTorch/CUDA versions;
+# pin it separately during the Docker/Ubuntu phase.
+fastapi
+uvicorn
+python-multipart
+numpy
+pillow
+opencv-python
+torch
+torchvision
+timm
+pycocotools
+fvcore
+iopath
+yacs
+omegaconf
+cloudpickle
