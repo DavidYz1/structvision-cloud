@@ -1,0 +1,20 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      USE_REAL_MAMT2: "true"
+      MAMT2_WORKER_URL: "http://host.docker.internal:9000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: "/api"
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend

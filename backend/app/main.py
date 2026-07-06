@@ -36,7 +36,7 @@ def health_check():
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    suffix = Path(file.filename).suffix
+    suffix = Path(file.filename or "upload.jpg").suffix or ".jpg"
     image_filename = f"{uuid.uuid4().hex}{suffix}"
     image_path = UPLOAD_DIR / image_filename
 
@@ -45,6 +45,7 @@ async def predict(file: UploadFile = File(...)):
         f.write(content)
 
     result = predict_image(str(image_path))
+    result_url = f"/results/{result['result_filename']}"
 
     return {
         "status": "success",
@@ -53,8 +54,10 @@ async def predict(file: UploadFile = File(...)):
         "labels": result["labels"],
         "scores": result["scores"],
         "masks": result.get("masks", []),
+        "result_image_path": result.get("result_image_path", ""),
         "result_filename": result["result_filename"],
-        "result_url": f"/results/{result['result_filename']}"
+        "result_url": result_url,
+        "result_image_url": f"/api{result_url}",
     }
 
 

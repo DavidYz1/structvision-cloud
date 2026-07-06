@@ -76,3 +76,28 @@ Model weight files should not be committed to Git.
 - Windows local real inference currently uses the existing `General` conda environment.
 - For Ubuntu/Docker, create a dedicated `mamt2-worker` environment from `worker/environment.yml` instead of reusing `General`.
 - Do not commit a full `pip freeze` from `General`; it contains machine-specific and unrelated packages.
+
+## Docker Lightweight Mode
+
+This stage Dockerizes only the frontend and backend api. The MAMT2 Worker still runs on the host machine in the `General` conda environment.
+
+1. Start the host Worker:
+
+```bash
+conda activate General
+bash scripts/start_worker.sh
+```
+
+2. Start frontend and backend containers:
+
+```bash
+docker compose up --build
+```
+
+3. Open the frontend:
+
+```text
+http://localhost:5173
+```
+
+In this mode, the backend container calls the host Worker through `http://host.docker.internal:9000`. The next phase will Dockerize the MAMT2 Worker.

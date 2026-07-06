@@ -237,3 +237,32 @@ conda activate mamt2-worker
 ```
 
 PyTorch/CUDA 与 Detectron2 的安装版本需要根据目标 GPU、CUDA Runtime 和基础镜像单独固定。
+
+## Docker 轻量模式
+
+当前 Docker 轻量模式只容器化 `frontend` 和 `backend api`，暂不容器化 MAMT2 Worker。
+
+启动步骤：
+
+1. 宿主机启动 Worker：
+
+```bash
+conda activate General
+bash scripts/start_worker.sh
+```
+
+2. 启动 frontend 和 backend 容器：
+
+```bash
+docker compose up --build
+```
+
+3. 访问前端：
+
+```text
+http://localhost:5173
+```
+
+该模式下，backend 容器通过 `http://host.docker.internal:9000` 访问宿主机 Worker。前端仍然请求 `http://127.0.0.1:8000`，由 backend api 再调用 Worker 的 `/predict-file` 接口完成真实推理。
+
+下一阶段再 Docker 化 MAMT2 Worker，并通过环境变量和模型挂载管理 `MAMT2_DETECTRON2_ROOT`、`MAMT2_CONFIG_PATH`、`MAMT2_WEIGHT_PATH` 和 `MAMT2_OUTPUT_DIR`。

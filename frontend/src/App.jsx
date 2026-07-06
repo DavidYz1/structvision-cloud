@@ -1,7 +1,7 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import "./App.css";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
 function App() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -54,9 +54,15 @@ function App() {
     }
   };
 
-  const resultImageUrl = result?.result_url
-    ? `${API_BASE_URL}${result.result_url}`
-    : "";
+  const getResultImageUrl = () => {
+    if (result?.result_image_url) return result.result_image_url;
+    if (!result?.result_url) return "";
+    if (result.result_url.startsWith("http")) return result.result_url;
+    if (result.result_url.startsWith(API_BASE_URL)) return result.result_url;
+    return `${API_BASE_URL}${result.result_url}`;
+  };
+
+  const resultImageUrl = getResultImageUrl();
 
   const formatLabels = (labels = []) => {
     if (!labels.length) return "";
@@ -163,3 +169,4 @@ function App() {
 }
 
 export default App;
+
