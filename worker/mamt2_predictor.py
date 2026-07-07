@@ -13,29 +13,53 @@ from typing import Any
 
 import numpy as np
 
+DEFAULT_STACK_ROOT = Path("/home/david/Python_projects/mamt2-stack")
+
 DETECTRON2_ROOT = Path(os.environ.get(
     "MAMT2_DETECTRON2_ROOT",
-    r"D:\pythonproject\MAMT2-final\detectron2-main",
+    str(DEFAULT_STACK_ROOT / "detectron2"),
 ))
-MAMT2_ROOT = DETECTRON2_ROOT / "projects" / "MAMT2"
-MAMT2_MAIN = MAMT2_ROOT / "MAMT2_main"
+MAMT2_MAIN = Path(os.environ.get(
+    "MAMT2_MAIN_DIR",
+    str(DEFAULT_STACK_ROOT / "detectron2" / "projects" / "MAMT2_main"),
+))
 CONFIG_PATH = Path(os.environ.get(
     "MAMT2_CONFIG_PATH",
-    r"D:\pythonproject\MAMT2-final\detectron2-main\projects\MAMT2\output"
-    r"\mamt2_swin_fpn_task18pretrained_paper_strong\config.yaml",
+    str(DEFAULT_STACK_ROOT / "mamt2-artifacts" / "configs" / "config_ubuntu.yaml"),
 ))
 WEIGHT_PATH = Path(os.environ.get(
     "MAMT2_WEIGHT_PATH",
-    r"D:\pythonproject\MAMT2-final\detectron2-main\projects\MAMT2\output"
-    r"\mamt2_swin_fpn_task18pretrained_paper_strong\model_best_segm.pth",
+    str(DEFAULT_STACK_ROOT / "mamt2-artifacts" / "weights" / "model_best_segm.pth"),
 ))
 DEFAULT_OUTPUT_DIR = Path(os.environ.get(
     "MAMT2_OUTPUT_DIR",
-    r"D:\pythonproject\mamt2-cloud-shm\backend\app\outputs",
+    str(DEFAULT_STACK_ROOT / "mamt2-cloud-shm" / "runtime" / "worker_outputs"),
 ))
 CLASS_ID_TO_LABEL = {0: "spalling"}
 
-for _path in (DETECTRON2_ROOT, MAMT2_ROOT, MAMT2_MAIN):
+def _validate_startup_paths() -> None:
+    required_paths = {
+        "MAMT2_DETECTRON2_ROOT": DETECTRON2_ROOT,
+        "MAMT2_MAIN_DIR": MAMT2_MAIN,
+        "MAMT2_CONFIG_PATH": CONFIG_PATH,
+        "MAMT2_WEIGHT_PATH": WEIGHT_PATH,
+        "MAMT2_OUTPUT_DIR": DEFAULT_OUTPUT_DIR,
+    }
+    missing = [
+        f"{name}={path}"
+        for name, path in required_paths.items()
+        if not path.exists()
+    ]
+    if missing:
+        raise FileNotFoundError(
+            "MAMT2 startup path check failed. Missing required path(s): "
+            + "; ".join(missing)
+        )
+
+
+_validate_startup_paths()
+
+for _path in (DETECTRON2_ROOT, MAMT2_MAIN):
     _path_str = str(_path)
     if _path_str not in sys.path:
         sys.path.insert(0, _path_str)
@@ -75,7 +99,7 @@ def _load_runtime() -> dict[str, Any]:
         raise RuntimeError(
             "Failed to import MAMT2 runtime dependencies. Confirm the General conda "
             "environment can import detectron2, torch, timm, cv2, and "
-            "projects/MAMT2/MAMT2_main/infer_supportdata_v3.py."
+            "detectron2/projects/MAMT2_main/infer_supportdata_v3.py."
         ) from exc
 
     _RUNTIME = {

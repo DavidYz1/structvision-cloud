@@ -13,10 +13,16 @@ env/
 # Uploaded / generated images
 backend/app/uploads/*
 backend/app/outputs/*
+runtime/
+model/
 
 # keep folder
 !backend/app/uploads/.gitkeep
 !backend/app/outputs/.gitkeep
+
+# Model artifacts
+*.pth
+*.pkl
 
 # Node
 frontend/node_modules/
