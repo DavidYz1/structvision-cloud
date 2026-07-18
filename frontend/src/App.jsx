@@ -81,16 +81,16 @@ function App() {
             <span className="logo-mark">
               <img src="/tongji-logo.png" alt="Tongji University" />
             </span>
-            MAMT2 Cloud SHM
+            StructVision Cloud
           </h1>
           <p>结构表观病害检测与实例分割云原生平台</p>
         </div>
-        <span className="badge">FastAPI + MAMT2 + K8s Ready</span>
+        <span className="badge">Kubernetes-Native GPU Visual Inference Platform</span>
       </header>
 
       <main className="main">
         <section className="panel upload-panel">
-          <h2>图片上传</h2>
+          <h2>上传检测图像</h2>
 
           <input
             className="file-input"
@@ -112,7 +112,7 @@ function App() {
         </section>
 
         <section className="panel image-panel">
-          <h2>原始图片</h2>
+          <h2>原始图像</h2>
           {previewUrl ? (
             <img className="image" src={previewUrl} alt="input preview" />
           ) : (
@@ -121,7 +121,7 @@ function App() {
         </section>
 
         <section className="panel image-panel">
-          <h2>识别结果</h2>
+          <h2>检测结果</h2>
           {resultImageUrl ? (
             <img className="image" src={resultImageUrl} alt="prediction result" />
           ) : (
@@ -130,7 +130,7 @@ function App() {
         </section>
 
         <section className="panel result-panel">
-          <h2>结果信息</h2>
+          <h2>检测详情</h2>
 
           {result ? (
             <div className="result-content">

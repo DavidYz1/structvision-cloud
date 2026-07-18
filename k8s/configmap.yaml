@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mamt2-config
+  namespace: mamt2
+data:
+  USE_REAL_MAMT2: "true"
+  MAMT2_WORKER_URL: "http://mamt2-worker:9000"
