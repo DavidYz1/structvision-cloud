@@ -1,0 +1,148 @@
+nameOverride: ""
+fullnameOverride: ""
+
+frontend:
+  replicaCount: 1
+
+  image:
+    repository: mamt2-frontend
+    tag: v1
+    pullPolicy: IfNotPresent
+
+  containerPort: 80
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 80
+
+  readinessProbe:
+    path: /
+    initialDelaySeconds: 2
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 6
+
+  livenessProbe:
+    path: /
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  resources: {}
+
+backend:
+  replicaCount: 1
+
+  image:
+    repository: mamt2-backend
+    tag: dev
+    pullPolicy: IfNotPresent
+
+  containerPort: 8000
+
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+
+  config:
+    useRealMamt2: "true"
+    workerUrl: "http://mamt2-worker:9000"
+
+  readinessProbe:
+    path: /
+    initialDelaySeconds: 2
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 6
+
+  livenessProbe:
+    path: /
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  resources: {}
+
+worker:
+  replicaCount: 1
+
+  image:
+    repository: mamt2-worker
+    tag: dev
+    pullPolicy: Never
+
+  containerPort: 9000
+
+  service:
+    type: ClusterIP
+    port: 9000
+    targetPort: http
+
+  env:
+    detectron2Root: /opt/detectron2
+    mainDir: /opt/MAMT2_main
+    configPath: /app/config/config_container.yaml
+
+  model:
+    existingClaim: mamt2-model-pvc
+    mountPath: /models
+    weightPath: /models/model_best_segm.pth
+    readOnly: true
+
+  output:
+    mountPath: /outputs
+
+  podSecurityContext:
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+
+  containerSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "3"
+      memory: 4Gi
+
+  gpu:
+    count: 1
+
+  startupProbe:
+    path: /healthz
+    periodSeconds: 5
+    failureThreshold: 60
+
+  readinessProbe:
+    path: /healthz
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  livenessProbe:
+    path: /healthz
+    periodSeconds: 20
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+ingress:
+  enabled: true
+  className: nginx
+  host: mamt2.test
+  path: /
+  pathType: Prefix
+
+persistence:
+  create: false
+  existingClaim: mamt2-model-pvc
+  accessMode: ReadWriteOnce
+  size: 2Gi

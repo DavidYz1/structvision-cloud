@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mamt2-worker
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+
+  selector:
+    matchLabels:
+      app: mamt2-worker
+
+  template:
+    metadata:
+      labels:
+        app: mamt2-worker
+
+    spec:
+      securityContext:
+{{ toYaml .Values.worker.podSecurityContext | indent 8 }}
+
+      containers:
+        - name: worker
+          image: "{{ .Values.worker.image.repository }}:{{ .Values.worker.image.tag }}"
+          imagePullPolicy: {{ .Values.worker.image.pullPolicy }}
+
+          ports:
+            - name: http
+              containerPort: {{ .Values.worker.containerPort }}
+              protocol: TCP
+
+          env:
+            - name: MAMT2_DETECTRON2_ROOT
+              value: {{ .Values.worker.env.detectron2Root | quote }}
+
+            - name: MAMT2_MAIN_DIR
+              value: {{ .Values.worker.env.mainDir | quote }}
+
+            - name: MAMT2_CONFIG_PATH
+              value: {{ .Values.worker.env.configPath | quote }}
+
+            - name: MAMT2_WEIGHT_PATH
+              value: {{ .Values.worker.model.weightPath | quote }}
+
+            - name: MAMT2_OUTPUT_DIR
+              value: {{ .Values.worker.output.mountPath | quote }}
+
+          securityContext:
+{{ toYaml .Values.worker.containerSecurityContext | indent 12 }}
+
+          resources:
+            requests:
+{{ toYaml .Values.worker.resources.requests | indent 14 }}
+            limits:
+{{ toYaml .Values.worker.resources.limits | indent 14 }}
+              nvidia.com/gpu: {{ .Values.worker.gpu.count }}
+
+          volumeMounts:
+            - name: model-storage
+              mountPath: {{ .Values.worker.model.mountPath | quote }}
+              readOnly: {{ .Values.worker.model.readOnly }}
+
+            - name: output-storage
+              mountPath: {{ .Values.worker.output.mountPath | quote }}
+
+          startupProbe:
+            httpGet:
+              path: {{ .Values.worker.startupProbe.path }}
+              port: http
+            periodSeconds: {{ .Values.worker.startupProbe.periodSeconds }}
+            failureThreshold: {{ .Values.worker.startupProbe.failureThreshold }}
+
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.worker.readinessProbe.path }}
+              port: http
+            periodSeconds: {{ .Values.worker.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.worker.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.worker.readinessProbe.failureThreshold }}
+
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.worker.livenessProbe.path }}
+              port: http
+            periodSeconds: {{ .Values.worker.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.worker.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.worker.livenessProbe.failureThreshold }}
+
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: {{ required "worker.model.existingClaim is required" .Values.worker.model.existingClaim }}
+
+        - name: output-storage
+          emptyDir: {}
