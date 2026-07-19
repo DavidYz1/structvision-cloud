@@ -3,6 +3,8 @@ kind: Service
 metadata:
   name: mamt2-worker
   namespace: {{ .Release.Namespace }}
+  labels:
+    app: mamt2-worker
 spec:
   type: {{ .Values.worker.service.type }}
 

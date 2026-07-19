@@ -1,10 +1,14 @@
 import base64
+import binascii
 import os
 from pathlib import Path
+import time
 import uuid
 
 import requests
 from PIL import Image, ImageDraw
+
+from app.metrics import WORKER_CALL_DURATION_SECONDS, WORKER_CALLS_TOTAL
 
 
 USE_REAL_MAMT2 = os.getenv("USE_REAL_MAMT2", "false").lower() == "true"
@@ -16,6 +20,10 @@ if USE_REAL_MAMT2:
     print(f"[infer_mamt2] USE_REAL_MAMT2=true, using worker: {MAMT2_WORKER_URL}")
 else:
     print("[infer_mamt2] USE_REAL_MAMT2=false, using mock predictor")
+
+
+class WorkerInvalidResponseError(RuntimeError):
+    """The Worker answered, but its HTTP or JSON response was not usable."""
 
 
 def predict_image_mock(image_path: str) -> dict:
@@ -92,25 +100,38 @@ def predict_image_mock(image_path: str) -> dict:
 
 def _parse_worker_json_response(response: requests.Response, endpoint: str) -> dict:
     if response.status_code != 200:
-        raise RuntimeError(
+        raise WorkerInvalidResponseError(
             f"MAMT2 Worker returned HTTP {response.status_code}: {response.text}"
         )
 
     try:
         data = response.json()
     except ValueError as exc:
-        raise RuntimeError(f"MAMT2 Worker returned non-JSON response: {response.text}") from exc
+        raise WorkerInvalidResponseError(
+            f"MAMT2 Worker returned non-JSON response: {response.text}"
+        ) from exc
 
-    if data.get("status") != "success":
-        raise RuntimeError(f"MAMT2 Worker returned unsuccessful response from {endpoint}: {data}")
+    if not isinstance(data, dict) or data.get("status") != "success":
+        raise WorkerInvalidResponseError(
+            f"MAMT2 Worker returned unsuccessful response from {endpoint}: {data}"
+        )
 
     return data
+
+
+def _require_worker_response_keys(data: dict, required_keys: list[str]) -> None:
+    missing_keys = [key for key in required_keys if key not in data]
+    if missing_keys:
+        raise WorkerInvalidResponseError(
+            f"MAMT2 Worker response missing keys: {missing_keys}"
+        )
 
 
 def predict_image_via_worker_path(image_path: str) -> dict:
     """Call the standalone MAMT2 Worker path endpoint for local debugging."""
     worker_url = MAMT2_WORKER_URL.rstrip("/")
-    endpoint = f"{worker_url}/predict"
+    endpoint_url = f"{worker_url}/predict"
+    endpoint_label = "/predict"
     payload = {
         "image_path": str(Path(image_path).resolve()),
         "output_dir": str(OUTPUT_DIR).replace("\\", "/"),
@@ -118,92 +139,136 @@ def predict_image_via_worker_path(image_path: str) -> dict:
 
     print(
         "[infer_mamt2] using worker path endpoint: "
-        f"{endpoint} image_path={payload['image_path']} output_dir={payload['output_dir']}"
+        f"{endpoint_url} image_path={payload['image_path']} output_dir={payload['output_dir']}"
     )
 
+    result_label = "invalid_response"
     try:
-        response = requests.post(endpoint, json=payload, timeout=WORKER_TIMEOUT_SECONDS)
-    except requests.Timeout as exc:
-        raise RuntimeError(
-            f"MAMT2 Worker request timed out after {WORKER_TIMEOUT_SECONDS}s: {endpoint}"
-        ) from exc
-    except requests.RequestException as exc:
-        raise RuntimeError(
-            f"Failed to call MAMT2 Worker at {endpoint}. Is the worker service running?"
-        ) from exc
+        started_at = time.perf_counter()
+        try:
+            response = requests.post(
+                endpoint_url,
+                json=payload,
+                timeout=WORKER_TIMEOUT_SECONDS,
+            )
+            data = _parse_worker_json_response(response, endpoint_url)
+            required_keys = [
+                "boxes",
+                "labels",
+                "scores",
+                "masks",
+                "result_image_path",
+                "result_filename",
+            ]
+            _require_worker_response_keys(data, required_keys)
+        except requests.Timeout as exc:
+            result_label = "timeout"
+            raise RuntimeError(
+                f"MAMT2 Worker request timed out after {WORKER_TIMEOUT_SECONDS}s: {endpoint_url}"
+            ) from exc
+        except requests.RequestException as exc:
+            result_label = "connection_error"
+            raise RuntimeError(
+                f"Failed to call MAMT2 Worker at {endpoint_url}. Is the worker service running?"
+            ) from exc
+        finally:
+            WORKER_CALL_DURATION_SECONDS.labels(endpoint=endpoint_label).observe(
+                time.perf_counter() - started_at
+            )
 
-    data = _parse_worker_json_response(response, endpoint)
-    required_keys = [
-        "boxes",
-        "labels",
-        "scores",
-        "masks",
-        "result_image_path",
-        "result_filename",
-    ]
-    missing_keys = [key for key in required_keys if key not in data]
-    if missing_keys:
-        raise RuntimeError(f"MAMT2 Worker response missing keys: {missing_keys}")
-
-    return {key: data[key] for key in required_keys}
+        result_label = "success"
+        return {key: data[key] for key in required_keys}
+    finally:
+        WORKER_CALLS_TOTAL.labels(
+            endpoint=endpoint_label,
+            result=result_label,
+        ).inc()
 
 
 def predict_image_via_worker_file(image_path: str) -> dict:
     """Upload an image file to the MAMT2 Worker for container-friendly inference."""
     worker_url = MAMT2_WORKER_URL.rstrip("/")
-    endpoint = f"{worker_url}/predict-file"
+    endpoint_url = f"{worker_url}/predict-file"
+    endpoint_label = "/predict-file"
     image_file = Path(image_path)
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    result_label = "invalid_response"
 
-    print(f"[infer_mamt2] using worker file upload endpoint: {endpoint}")
+    print(f"[infer_mamt2] using worker file upload endpoint: {endpoint_url}")
 
     try:
-        with image_file.open("rb") as file_obj:
+        try:
+            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            file_obj = image_file.open("rb")
+        except OSError as exc:
+            result_label = "local_io_error"
+            raise RuntimeError(f"Failed to open image for Worker upload: {image_file}") from exc
+
+        with file_obj:
             files = {
                 "file": (image_file.name, file_obj, "application/octet-stream"),
             }
-            response = requests.post(endpoint, files=files, timeout=WORKER_TIMEOUT_SECONDS)
-    except requests.Timeout as exc:
-        raise RuntimeError(
-            f"MAMT2 Worker file request timed out after {WORKER_TIMEOUT_SECONDS}s: {endpoint}"
-        ) from exc
-    except requests.RequestException as exc:
-        raise RuntimeError(
-            f"Failed to call MAMT2 Worker file endpoint at {endpoint}. Is the worker service running?"
-        ) from exc
-    except OSError as exc:
-        raise RuntimeError(f"Failed to open image for Worker upload: {image_file}") from exc
+            started_at = time.perf_counter()
+            try:
+                response = requests.post(
+                    endpoint_url,
+                    files=files,
+                    timeout=WORKER_TIMEOUT_SECONDS,
+                )
+                data = _parse_worker_json_response(response, endpoint_url)
+                required_keys = [
+                    "boxes",
+                    "labels",
+                    "scores",
+                    "masks",
+                    "result_filename",
+                    "result_image_base64",
+                ]
+                _require_worker_response_keys(data, required_keys)
+            except requests.Timeout as exc:
+                result_label = "timeout"
+                raise RuntimeError(
+                    "MAMT2 Worker file request timed out after "
+                    f"{WORKER_TIMEOUT_SECONDS}s: {endpoint_url}"
+                ) from exc
+            except requests.RequestException as exc:
+                result_label = "connection_error"
+                raise RuntimeError(
+                    "Failed to call MAMT2 Worker file endpoint at "
+                    f"{endpoint_url}. Is the worker service running?"
+                ) from exc
+            finally:
+                WORKER_CALL_DURATION_SECONDS.labels(endpoint=endpoint_label).observe(
+                    time.perf_counter() - started_at
+                )
 
-    data = _parse_worker_json_response(response, endpoint)
-    required_keys = [
-        "boxes",
-        "labels",
-        "scores",
-        "masks",
-        "result_filename",
-        "result_image_base64",
-    ]
-    missing_keys = [key for key in required_keys if key not in data]
-    if missing_keys:
-        raise RuntimeError(f"MAMT2 Worker file response missing keys: {missing_keys}")
+        result_filename = data["result_filename"] or f"result_{uuid.uuid4().hex}.jpg"
+        try:
+            result_path = OUTPUT_DIR / result_filename
+            result_image_bytes = base64.b64decode(data["result_image_base64"])
+        except (binascii.Error, TypeError, ValueError) as exc:
+            result_label = "invalid_response"
+            raise RuntimeError("Failed to decode Worker result image") from exc
 
-    result_filename = data["result_filename"] or f"result_{uuid.uuid4().hex}.jpg"
-    result_path = OUTPUT_DIR / result_filename
+        try:
+            result_path.write_bytes(result_image_bytes)
+        except OSError as exc:
+            result_label = "local_io_error"
+            raise RuntimeError(f"Failed to save Worker result image: {result_path}") from exc
 
-    try:
-        result_image_bytes = base64.b64decode(data["result_image_base64"])
-        result_path.write_bytes(result_image_bytes)
-    except Exception as exc:  # noqa: BLE001
-        raise RuntimeError(f"Failed to decode or save Worker result image: {result_path}") from exc
-
-    return {
-        "boxes": data["boxes"],
-        "labels": data["labels"],
-        "scores": data["scores"],
-        "masks": data["masks"],
-        "result_image_path": str(result_path),
-        "result_filename": result_filename,
-    }
+        result_label = "success"
+        return {
+            "boxes": data["boxes"],
+            "labels": data["labels"],
+            "scores": data["scores"],
+            "masks": data["masks"],
+            "result_image_path": str(result_path),
+            "result_filename": result_filename,
+        }
+    finally:
+        WORKER_CALLS_TOTAL.labels(
+            endpoint=endpoint_label,
+            result=result_label,
+        ).inc()
 
 
 def predict_image(image_path: str) -> dict:

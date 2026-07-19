@@ -37,7 +37,7 @@ backend:
 
   image:
     repository: mamt2-backend
-    tag: dev
+    tag: v1
     pullPolicy: IfNotPresent
 
   containerPort: 8000
@@ -72,7 +72,7 @@ worker:
 
   image:
     repository: mamt2-worker
-    tag: dev
+    tag: v1
     pullPolicy: Never
 
   containerPort: 9000
@@ -146,3 +146,10 @@ persistence:
   existingClaim: mamt2-model-pvc
   accessMode: ReadWriteOnce
   size: 2Gi
+
+monitoring:
+  serviceMonitor:
+    enabled: false
+    interval: 15s
+    scrapeTimeout: 10s
+    additionalLabels: {}

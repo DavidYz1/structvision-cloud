@@ -17,3 +17,4 @@ iopath
 yacs
 omegaconf
 cloudpickle
+prometheus-client

@@ -24,3 +24,4 @@ dependencies:
       - yacs
       - omegaconf
       - cloudpickle
+      - prometheus-client

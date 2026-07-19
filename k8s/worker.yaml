@@ -22,7 +22,7 @@ spec:
 
       containers:
         - name: worker
-          image: mamt2-worker:dev
+          image: mamt2-worker:v1
           imagePullPolicy: Never
 
           ports:

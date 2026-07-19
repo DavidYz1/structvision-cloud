@@ -6,6 +6,9 @@ metadata:
 spec:
   replicas: {{ .Values.worker.replicaCount }}
 
+  strategy:
+    type: Recreate
+    rollingUpdate: null
   selector:
     matchLabels:
       app: mamt2-worker

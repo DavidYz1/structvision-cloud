@@ -1,11 +1,19 @@
 from pathlib import Path
+import time
 import uuid
 
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.infer_mamt2 import predict_image
+from app.metrics import (
+    HTTP_REQUEST_DURATION_SECONDS,
+    HTTP_REQUESTS_IN_PROGRESS,
+    HTTP_REQUESTS_TOTAL,
+    REGISTRY,
+)
 
 
 app = FastAPI(title="MAMT2 Cloud SHM API")
@@ -25,6 +33,46 @@ OUTPUT_DIR = BASE_DIR / "outputs"
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@app.middleware("http")
+async def record_http_metrics(request: Request, call_next):
+    # Prometheus scrapes are intentionally excluded from the business HTTP series.
+    if request.url.path == "/metrics":
+        return await call_next(request)
+
+    method = request.method
+    started_at = time.perf_counter()
+    status_code = 500
+    HTTP_REQUESTS_IN_PROGRESS.labels(method=method).inc()
+
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        route = request.scope.get("route")
+        route_template = getattr(route, "path", "unmatched")
+        if not route_template:
+            route_template = "unmatched"
+
+        try:
+            HTTP_REQUESTS_TOTAL.labels(
+                method=method,
+                route=route_template,
+                status_code=str(status_code),
+            ).inc()
+            HTTP_REQUEST_DURATION_SECONDS.labels(
+                method=method,
+                route=route_template,
+            ).observe(time.perf_counter() - started_at)
+        finally:
+            HTTP_REQUESTS_IN_PROGRESS.labels(method=method).dec()
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics() -> Response:
+    return Response(generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/")

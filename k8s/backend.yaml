@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: mamt2-backend:dev
+          image: mamt2-backend:v1
           imagePullPolicy: IfNotPresent
 
           ports:

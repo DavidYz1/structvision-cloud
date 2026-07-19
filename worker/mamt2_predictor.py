@@ -6,12 +6,15 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 import sys
 import threading
+import time
 import uuid
 from argparse import Namespace
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+from worker.metrics import MODEL_LOAD_DURATION_SECONDS, MODEL_LOADED
 
 DEFAULT_STACK_ROOT = Path("/home/david/Python_projects/mamt2-stack")
 
@@ -36,6 +39,15 @@ DEFAULT_OUTPUT_DIR = Path(os.environ.get(
     str(DEFAULT_STACK_ROOT / "mamt2-cloud-shm" / "runtime" / "worker_outputs"),
 ))
 CLASS_ID_TO_LABEL = {0: "spalling"}
+
+
+class MAMT2InputError(ValueError):
+    """The supplied image cannot be used as prediction input."""
+
+
+class MAMT2OutputError(RuntimeError):
+    """The prediction output cannot be created or saved."""
+
 
 def _validate_startup_paths() -> None:
     required_paths = {
@@ -208,10 +220,15 @@ class MAMT2Predictor:
     def predict(self, image_path: str, output_dir: str | Path | None = None) -> dict:
         image_file = Path(image_path)
         if not image_file.exists():
-            raise FileNotFoundError(f"Input image does not exist: {image_file}")
+            raise MAMT2InputError(f"Input image does not exist: {image_file}")
 
         save_dir = Path(output_dir) if output_dir is not None else DEFAULT_OUTPUT_DIR
-        save_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            save_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise MAMT2OutputError(
+                f"Failed to prepare MAMT2 output directory: {save_dir}"
+            ) from exc
 
         imread_unicode = self.runtime["imread_unicode"]
         imwrite_unicode = self.runtime["imwrite_unicode"]
@@ -221,7 +238,7 @@ class MAMT2Predictor:
 
         image_bgr = imread_unicode(image_file)
         if image_bgr is None:
-            raise ValueError(f"Failed to read input image: {image_file}")
+            raise MAMT2InputError(f"Failed to read input image: {image_file}")
 
         try:
             outputs = predict_one(self.args, self.cfg, self.model, image_bgr)
@@ -272,7 +289,9 @@ class MAMT2Predictor:
             if not imwrite_unicode(result_path, result_bgr):
                 raise RuntimeError(f"Failed to write visualization image: {result_path}")
         except Exception as exc:  # noqa: BLE001
-            raise RuntimeError(f"Failed to save MAMT2 visualization image: {result_path}") from exc
+            raise MAMT2OutputError(
+                f"Failed to save MAMT2 visualization image: {result_path}"
+            ) from exc
 
         return {
             "boxes": boxes,
@@ -289,7 +308,18 @@ def get_predictor() -> MAMT2Predictor:
     if _PREDICTOR is None:
         with _PREDICTOR_LOCK:
             if _PREDICTOR is None:
-                _PREDICTOR = MAMT2Predictor()
+                started_at = time.perf_counter()
+                try:
+                    _PREDICTOR = MAMT2Predictor()
+                except Exception:
+                    MODEL_LOADED.set(0)
+                    raise
+                else:
+                    MODEL_LOADED.set(1)
+                finally:
+                    MODEL_LOAD_DURATION_SECONDS.observe(
+                        time.perf_counter() - started_at
+                    )
     return _PREDICTOR
 
 
