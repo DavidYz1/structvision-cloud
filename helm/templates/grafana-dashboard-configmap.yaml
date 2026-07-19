@@ -1,0 +1,16 @@
+{{- if .Values.monitoring.grafanaDashboard.enabled }}
+{{- $dashboard := .Files.Get "dashboards/structvision-overview.json" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: structvision-grafana-dashboard
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+    {{ .Values.monitoring.grafanaDashboard.label.key }}: {{ .Values.monitoring.grafanaDashboard.label.value | quote }}
+  annotations:
+    checksum/dashboard: {{ $dashboard | sha256sum | quote }}
+data:
+  structvision-overview.json: |
+{{ $dashboard | indent 4 }}
+{{- end }}

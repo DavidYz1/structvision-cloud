@@ -72,7 +72,7 @@ worker:
 
   image:
     repository: mamt2-worker
-    tag: v1
+    tag: v1.1
     pullPolicy: Never
 
   containerPort: 9000
@@ -149,7 +149,13 @@ persistence:
 
 monitoring:
   serviceMonitor:
-    enabled: false
+    enabled: true
     interval: 15s
     scrapeTimeout: 10s
     additionalLabels: {}
+
+  grafanaDashboard:
+    enabled: true
+    label:
+      key: grafana_dashboard
+      value: "1"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import sys
 import tempfile
 import time
@@ -28,6 +29,9 @@ from worker.metrics import (  # noqa: E402
     INFERENCE_REQUESTS_TOTAL,
     REGISTRY,
 )
+
+
+logger = logging.getLogger("uvicorn.error")
 
 
 app = FastAPI(title="MAMT2 Worker", version="0.1.0")
@@ -79,18 +83,33 @@ def predict(request: PredictRequest) -> dict:
             )
         except MAMT2InputError as exc:
             result_label = "invalid_input"
+            logger.exception(
+                "MAMT2 Worker request failed: endpoint=%s exception_type=%s",
+                endpoint,
+                type(exc).__name__,
+            )
             raise HTTPException(
                 status_code=500,
                 detail=f"MAMT2 worker inference failed: {exc}",
             ) from exc
         except MAMT2OutputError as exc:
             result_label = "output_error"
+            logger.exception(
+                "MAMT2 Worker request failed: endpoint=%s exception_type=%s",
+                endpoint,
+                type(exc).__name__,
+            )
             raise HTTPException(
                 status_code=500,
                 detail=f"MAMT2 worker inference failed: {exc}",
             ) from exc
         except Exception as exc:  # noqa: BLE001
             result_label = "inference_error"
+            logger.exception(
+                "MAMT2 Worker request failed: endpoint=%s exception_type=%s",
+                endpoint,
+                type(exc).__name__,
+            )
             raise HTTPException(
                 status_code=500,
                 detail=f"MAMT2 worker inference failed: {exc}",
@@ -162,17 +181,38 @@ async def predict_file(file: UploadFile = File(...)) -> dict:
                 }
         except MAMT2InputError as exc:
             result_label = "invalid_input"
+            logger.exception(
+                "MAMT2 Worker file request failed: "
+                "endpoint=%s exception_type=%s upload_filename=%r",
+                endpoint,
+                type(exc).__name__,
+                file.filename,
+            )
             raise HTTPException(
                 status_code=500,
                 detail=f"MAMT2 worker file inference failed: {exc}",
             ) from exc
         except MAMT2OutputError as exc:
             result_label = "output_error"
+            logger.exception(
+                "MAMT2 Worker file request failed: "
+                "endpoint=%s exception_type=%s upload_filename=%r",
+                endpoint,
+                type(exc).__name__,
+                file.filename,
+            )
             raise HTTPException(
                 status_code=500,
                 detail=f"MAMT2 worker file inference failed: {exc}",
             ) from exc
         except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "MAMT2 Worker file request failed: "
+                "endpoint=%s exception_type=%s upload_filename=%r",
+                endpoint,
+                type(exc).__name__,
+                file.filename,
+            )
             raise HTTPException(
                 status_code=500,
                 detail=f"MAMT2 worker file inference failed: {exc}",

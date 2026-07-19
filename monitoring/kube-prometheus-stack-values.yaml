@@ -1,0 +1,103 @@
+# Lightweight monitoring stack for the single-node StructVision Minikube cluster.
+
+defaultRules:
+  create: false
+
+alertmanager:
+  enabled: false
+
+grafana:
+  enabled: true
+  defaultDashboardsEnabled: false
+
+  persistence:
+    enabled: false
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 384Mi
+
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: ALL
+
+prometheusOperator:
+  enabled: true
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+prometheus:
+  enabled: true
+
+  prometheusSpec:
+    replicas: 1
+
+    retention: 24h
+
+    scrapeInterval: 15s
+    evaluationInterval: 30s
+
+    # Discover ServiceMonitors in every namespace,
+    # including the mamt2 namespace.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}
+    podMonitorNamespaceSelector: {}
+
+    resources:
+      requests:
+        cpu: 150m
+        memory: 384Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+kube-state-metrics:
+  enabled: true
+
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 192Mi
+
+prometheus-node-exporter:
+  enabled: true
+
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 150m
+      memory: 128Mi
+
+# These control-plane targets are often unavailable in a Docker-driver
+# Minikube cluster and are not needed for the first project dashboard.
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+
+kubeProxy:
+  enabled: false

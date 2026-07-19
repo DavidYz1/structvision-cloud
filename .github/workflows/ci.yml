@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Python, Dashboard, and Helm validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Compile Python sources
+        run: python -m compileall backend worker
+
+      - name: Validate Grafana Dashboard JSON
+        run: python -m json.tool helm/dashboards/structvision-overview.json > /dev/null
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: Lint Helm Chart
+        run: helm lint helm
+
+      - name: Render default Helm Chart
+        run: helm template mamt2 helm -n mamt2 > "${RUNNER_TEMP}/default.yaml"
+
+      - name: Verify default observability resources
+        shell: bash
+        run: |
+          service_monitor_count="$(grep -c '^kind: ServiceMonitor$' "${RUNNER_TEMP}/default.yaml")"
+          dashboard_count="$(grep -c '^  name: structvision-grafana-dashboard$' "${RUNNER_TEMP}/default.yaml")"
+
+          test "${service_monitor_count}" -eq 2
+          test "${dashboard_count}" -eq 1
+          grep -q '^    grafana_dashboard: "1"$' "${RUNNER_TEMP}/default.yaml"
+          grep -q '^  structvision-overview.json: |$' "${RUNNER_TEMP}/default.yaml"
+
+      - name: Verify ServiceMonitor disable switch
+        shell: bash
+        run: |
+          helm template mamt2 helm -n mamt2 \
+            --set monitoring.serviceMonitor.enabled=false \
+            > "${RUNNER_TEMP}/service-monitor-disabled.yaml"
+
+          if grep -q '^kind: ServiceMonitor$' "${RUNNER_TEMP}/service-monitor-disabled.yaml"; then
+            echo "ServiceMonitor rendered while monitoring.serviceMonitor.enabled=false"
+            exit 1
+          fi
+
+      - name: Verify Dashboard disable switch
+        shell: bash
+        run: |
+          helm template mamt2 helm -n mamt2 \
+            --set monitoring.grafanaDashboard.enabled=false \
+            > "${RUNNER_TEMP}/dashboard-disabled.yaml"
+
+          if grep -q '^  name: structvision-grafana-dashboard$' "${RUNNER_TEMP}/dashboard-disabled.yaml"; then
+            echo "Dashboard ConfigMap rendered while monitoring.grafanaDashboard.enabled=false"
+            exit 1
+          fi
+
+      - name: Check whitespace
+        shell: bash
+        run: |
+          git diff --check
+
+          if git grep -nI -E '[[:blank:]]+$' -- .; then
+            echo "Trailing whitespace found"
+            exit 1
+          fi

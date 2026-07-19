@@ -1,0 +1,47 @@
+# NVIDIA DCGM Exporter runs as a node-level DaemonSet. Each Pod reads
+# GPU telemetry from its node and exposes Prometheus metrics on port 9400.
+#
+# The single-node Minikube cluster has only one schedulable GPU. The
+# mamt2-worker owns that Kubernetes GPU resource, so dcgm-exporter must
+# not request or limit nvidia.com/gpu.
+
+service:
+  enable: true
+  type: ClusterIP
+  port: 9400
+  address: ":9400"
+
+# Prometheus Operator discovers this ServiceMonitor and automatically
+# configures Prometheus to scrape the dcgm-exporter Service.
+serviceMonitor:
+  enabled: true
+  interval: 15s
+  scrapeTimeout: 10s
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 512Mi
+
+# The current Minikube cluster does not use an explicit RuntimeClass.
+runtimeClassName: ""
+
+hostNetwork: false
+hostPID: false
+
+# Enrich GPU metrics with low-cardinality Kubernetes workload labels.
+# RBAC is required so dcgm-exporter can read Pod metadata.
+kubernetes:
+  enablePodLabels: true
+  enablePodUID: false
+
+  podLabelAllowlistRegex:
+    - "^app$"
+    - "^app\\.kubernetes\\.io/name$"
+    - "^app\\.kubernetes\\.io/instance$"
+
+  rbac:
+    create: true
