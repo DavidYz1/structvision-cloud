@@ -9,7 +9,7 @@ from pathlib import Path
 
 WHEEL_FILENAME = "detectron2-0.6-cp312-cp312-linux_x86_64.whl"
 WHEEL_URL = (
-    "https://github.com/DavidYz/mamt2-cloud-shm/releases/download/"
+    "https://github.com/DavidYz1/mamt2-cloud-shm/releases/download/"
     "runtime-deps-v1/"
     f"{WHEEL_FILENAME}"
 )
