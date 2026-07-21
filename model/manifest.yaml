@@ -20,5 +20,5 @@ detectron2:
   version: "0.6"
   wheel:
     filename: detectron2-0.6-cp312-cp312-linux_x86_64.whl
-    url: https://github.com/DavidYz1/mamt2-cloud-shm/releases/download/runtime-deps-v1/detectron2-0.6-cp312-cp312-linux_x86_64.whl
+    url: https://github.com/DavidYz1/structvision-cloud/releases/download/runtime-deps-v1/detectron2-0.6-cp312-cp312-linux_x86_64.whl
     sha256: eb7295b6cb477467cb03660ea024a11ab13e97fc12b157040b9234897f809ace
