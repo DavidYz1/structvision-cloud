@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import logging
-import sys
 import tempfile
 import time
 from pathlib import Path
@@ -13,16 +12,12 @@ from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from worker.mamt2_predictor import (  # noqa: E402
+from worker.mamt2_predictor import (
     MAMT2InputError,
     MAMT2OutputError,
     get_predictor,
 )
-from worker.metrics import (  # noqa: E402
+from worker.metrics import (
     DETECTED_INSTANCES,
     INFERENCE_DURATION_SECONDS,
     INFERENCE_IN_PROGRESS,

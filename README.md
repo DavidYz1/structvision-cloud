@@ -109,10 +109,10 @@ eval "$(minikube --profile mamt2 docker-env)"
 
 docker build -t mamt2-frontend:v1 frontend
 docker build -t mamt2-backend:v1 backend
-docker build -t mamt2-worker:v1.1 -f worker/Dockerfile ..
+docker build -t mamt2-worker:hf-v1 -f worker/Dockerfile.hf .
 ```
 
-Worker Dockerfile 使用上一级 `mamt2-stack` 作为构建上下文，以便复制本地 Detectron2/MAMT2 源码、配置和已构建 wheel。该镜像较大，不在 CI 中构建。
+旁路 `worker/Dockerfile.hf` 使用当前仓库作为构建上下文。MAMT2 在线 runtime 和推理配置位于仓库内；固定版本的 Detectron2 wheel 从版本化 GitHub Release URL 下载并强制校验 SHA256。模型权重不进入构建上下文或镜像，仍在运行时挂载。原 `worker/Dockerfile` 暂留作旧链路基线，不用于 `hf-v1`。该 GPU 镜像较大，暂不在 CI 中构建。
 
 ### 3. 创建 Namespace、PVC 并加载模型权重
 
