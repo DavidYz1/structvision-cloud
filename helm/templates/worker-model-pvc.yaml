@@ -1,0 +1,20 @@
+{{- if and .Values.worker.model.persistence.enabled (not .Values.worker.model.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "helm.workerModelClaimName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "helm.labels" . | indent 4 }}
+spec:
+  accessModes:
+{{- range .Values.worker.model.persistence.accessModes }}
+    - {{ . | quote }}
+{{- end }}
+{{- if .Values.worker.model.persistence.storageClass }}
+  storageClassName: {{ .Values.worker.model.persistence.storageClass | quote }}
+{{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.worker.model.persistence.size | quote }}
+{{- end }}

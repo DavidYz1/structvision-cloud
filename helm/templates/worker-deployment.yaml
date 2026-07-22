@@ -22,6 +22,102 @@ spec:
       securityContext:
 {{ toYaml .Values.worker.podSecurityContext | indent 8 }}
 
+      initContainers:
+        - name: model-weight-downloader
+          image: "{{ .Values.worker.model.download.image.repository }}:{{ .Values.worker.model.download.image.tag }}"
+          imagePullPolicy: {{ .Values.worker.model.download.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              set -eu
+
+              expected_target="${MODEL_MOUNT_PATH%/}/${MODEL_FILENAME}"
+              if [ "${MODEL_TARGET_PATH}" != "${expected_target}" ]; then
+                echo "Model target path does not match mountPath/filename: ${MODEL_TARGET_PATH}" >&2
+                exit 1
+              fi
+
+              case "${MODEL_URL}" in
+                *"/resolve/${MODEL_REVISION}/${MODEL_FILENAME}"*) ;;
+                *)
+                  echo "Model URL is not pinned to revision ${MODEL_REVISION} and filename ${MODEL_FILENAME}" >&2
+                  exit 1
+                  ;;
+              esac
+
+              if [ -f "${MODEL_TARGET_PATH}" ] && \
+                 printf '%s  %s\n' "${MODEL_SHA256}" "${MODEL_TARGET_PATH}" | sha256sum -c - >/dev/null 2>&1; then
+                echo "Model weight checksum verified; skipping download: ${MODEL_TARGET_PATH}"
+                exit 0
+              fi
+
+              if [ -e "${MODEL_TARGET_PATH}" ]; then
+                echo "Existing model weight failed checksum validation; downloading a verified replacement"
+              else
+                echo "Model weight is absent; downloading pinned revision ${MODEL_REVISION}"
+              fi
+
+              temp_file="$(mktemp "${MODEL_TARGET_PATH}.part.XXXXXX")"
+              trap 'rm -f "${temp_file}"' EXIT HUP INT TERM
+
+              curl \
+                --fail \
+                --location \
+                --show-error \
+                --silent \
+                --retry 5 \
+                --retry-delay 2 \
+                --retry-all-errors \
+                --connect-timeout 30 \
+                --output "${temp_file}" \
+                "${MODEL_URL}"
+
+              if ! printf '%s  %s\n' "${MODEL_SHA256}" "${temp_file}" | sha256sum -c -; then
+                echo "Downloaded model weight failed SHA256 validation" >&2
+                exit 1
+              fi
+
+              chmod 0444 "${temp_file}"
+              mv -f "${temp_file}" "${MODEL_TARGET_PATH}"
+              trap - EXIT HUP INT TERM
+              echo "Model weight installed atomically: ${MODEL_TARGET_PATH}"
+          env:
+            - name: MODEL_REPOSITORY
+              value: {{ .Values.worker.model.repository | quote }}
+            - name: MODEL_REVISION
+              value: {{ .Values.worker.model.revision | quote }}
+            - name: MODEL_FILENAME
+              value: {{ .Values.worker.model.filename | quote }}
+            - name: MODEL_SHA256
+              value: {{ .Values.worker.model.sha256 | quote }}
+            - name: MODEL_URL
+              value: {{ .Values.worker.model.download.url | quote }}
+            - name: MODEL_MOUNT_PATH
+              value: {{ .Values.worker.model.mountPath | quote }}
+            - name: MODEL_TARGET_PATH
+              value: {{ .Values.worker.model.weightPath | quote }}
+{{- if .Values.worker.model.download.proxy.enabled }}
+            - name: HTTP_PROXY
+              value: {{ required "worker.model.download.proxy.httpProxy is required when worker.model.download.proxy.enabled=true" .Values.worker.model.download.proxy.httpProxy | quote }}
+            - name: HTTPS_PROXY
+              value: {{ required "worker.model.download.proxy.httpsProxy is required when worker.model.download.proxy.enabled=true" .Values.worker.model.download.proxy.httpsProxy | quote }}
+            - name: NO_PROXY
+              value: {{ .Values.worker.model.download.proxy.noProxy | quote }}
+            - name: http_proxy
+              value: {{ required "worker.model.download.proxy.httpProxy is required when worker.model.download.proxy.enabled=true" .Values.worker.model.download.proxy.httpProxy | quote }}
+            - name: https_proxy
+              value: {{ required "worker.model.download.proxy.httpsProxy is required when worker.model.download.proxy.enabled=true" .Values.worker.model.download.proxy.httpsProxy | quote }}
+            - name: no_proxy
+              value: {{ .Values.worker.model.download.proxy.noProxy | quote }}
+{{- end }}
+          securityContext:
+{{ toYaml .Values.worker.containerSecurityContext | indent 12 }}
+          volumeMounts:
+            - name: model-storage
+              mountPath: {{ .Values.worker.model.mountPath | quote }}
+              readOnly: false
+
       containers:
         - name: worker
           image: "{{ .Values.worker.image.repository }}:{{ .Values.worker.image.tag }}"
@@ -91,8 +187,15 @@ spec:
 
       volumes:
         - name: model-storage
+{{- if .Values.worker.model.existingClaim }}
           persistentVolumeClaim:
-            claimName: {{ required "worker.model.existingClaim is required" .Values.worker.model.existingClaim }}
+            claimName: {{ include "helm.workerModelClaimName" . }}
+{{- else if .Values.worker.model.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "helm.workerModelClaimName" . }}
+{{- else }}
+          emptyDir: {}
+{{- end }}
 
         - name: output-storage
           emptyDir: {}

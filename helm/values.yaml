@@ -72,7 +72,7 @@ worker:
 
   image:
     repository: mamt2-worker
-    tag: v1.1
+    tag: hf-v1
     pullPolicy: Never
 
   containerPort: 9000
@@ -83,15 +83,36 @@ worker:
     targetPort: http
 
   env:
-    detectron2Root: /opt/detectron2
-    mainDir: /opt/MAMT2_main
-    configPath: /app/config/config_container.yaml
+    detectron2Root: /opt/venv/lib/python3.12/site-packages
+    mainDir: /app/worker/mamt2_runtime
+    configPath: /app/model/config.yaml
 
   model:
-    existingClaim: mamt2-model-pvc
+    repository: DavidYz/structvision-spalling
+    revision: 0b33cdd893b789316ee0a6ce5b5ccc639028c02d
+    filename: model_best_segm.pth
+    sha256: ea1a4e99731f7755598a59527ca782a30c48c08df57d6a61bcd5e95f377be0e2
+    existingClaim: ""
     mountPath: /models
     weightPath: /models/model_best_segm.pth
     readOnly: true
+    persistence:
+      enabled: true
+      accessModes:
+        - ReadWriteOnce
+      size: 2Gi
+      storageClass: ""
+    download:
+      image:
+        repository: curlimages/curl
+        tag: 8.14.1
+        pullPolicy: IfNotPresent
+      url: https://huggingface.co/DavidYz/structvision-spalling/resolve/0b33cdd893b789316ee0a6ce5b5ccc639028c02d/model_best_segm.pth?download=true
+      proxy:
+        enabled: false
+        httpProxy: ""
+        httpsProxy: ""
+        noProxy: "localhost,127.0.0.1,.svc,.cluster.local,10.96.0.0/12,10.244.0.0/16"
 
   output:
     mountPath: /outputs
@@ -140,12 +161,6 @@ ingress:
   host: mamt2.test
   path: /
   pathType: Prefix
-
-persistence:
-  create: false
-  existingClaim: mamt2-model-pvc
-  accessMode: ReadWriteOnce
-  size: 2Gi
 
 monitoring:
   serviceMonitor:

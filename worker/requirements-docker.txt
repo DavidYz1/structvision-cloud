@@ -1,6 +1,6 @@
 # Runtime dependencies for the containerized MAMT2 GPU Worker.
 # torch and torchvision are supplied by the PyTorch CUDA base image.
-# detectron2 is built separately from the local source tree.
+# detectron2 is installed separately from a pinned, SHA256-verified wheel.
 
 fastapi==0.139.0
 uvicorn==0.50.2

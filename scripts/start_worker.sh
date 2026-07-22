@@ -4,7 +4,6 @@
 set -e
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-STACK_ROOT="$(cd "$PROJECT_ROOT/.." && pwd)"
 
 cd "$PROJECT_ROOT"
 
@@ -17,10 +16,10 @@ fi
 
 export KMP_DUPLICATE_LIB_OK="${KMP_DUPLICATE_LIB_OK:-TRUE}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
-export MAMT2_DETECTRON2_ROOT="${MAMT2_DETECTRON2_ROOT:-$STACK_ROOT/detectron2}"
-export MAMT2_MAIN_DIR="${MAMT2_MAIN_DIR:-$STACK_ROOT/detectron2/projects/MAMT2_main}"
-export MAMT2_CONFIG_PATH="${MAMT2_CONFIG_PATH:-$STACK_ROOT/mamt2-artifacts/configs/config_ubuntu.yaml}"
-export MAMT2_WEIGHT_PATH="${MAMT2_WEIGHT_PATH:-$STACK_ROOT/mamt2-artifacts/weights/model_best_segm.pth}"
+export MAMT2_DETECTRON2_ROOT="${MAMT2_DETECTRON2_ROOT:-}"
+export MAMT2_MAIN_DIR="${MAMT2_MAIN_DIR:-$PROJECT_ROOT/worker/mamt2_runtime}"
+export MAMT2_CONFIG_PATH="${MAMT2_CONFIG_PATH:-$PROJECT_ROOT/model/config.yaml}"
+export MAMT2_WEIGHT_PATH="${MAMT2_WEIGHT_PATH:-$PROJECT_ROOT/model/model_best_segm.pth}"
 export MAMT2_OUTPUT_DIR="${MAMT2_OUTPUT_DIR:-$PROJECT_ROOT/runtime/worker_outputs}"
 export MAMT2_WORKER_HOST="${MAMT2_WORKER_HOST:-0.0.0.0}"
 export MAMT2_WORKER_PORT="${MAMT2_WORKER_PORT:-9000}"

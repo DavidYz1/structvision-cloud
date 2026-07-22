@@ -4,7 +4,6 @@ import os
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
-import sys
 import threading
 import time
 import uuid
@@ -16,27 +15,33 @@ import numpy as np
 
 from worker.metrics import MODEL_LOAD_DURATION_SECONDS, MODEL_LOADED
 
-DEFAULT_STACK_ROOT = Path("/home/david/Python_projects/mamt2-stack")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+MODEL_ROOT = PROJECT_ROOT / "model"
 
-DETECTRON2_ROOT = Path(os.environ.get(
-    "MAMT2_DETECTRON2_ROOT",
-    str(DEFAULT_STACK_ROOT / "detectron2"),
-))
-MAMT2_MAIN = Path(os.environ.get(
-    "MAMT2_MAIN_DIR",
-    str(DEFAULT_STACK_ROOT / "detectron2" / "projects" / "MAMT2_main"),
-))
+# Retained as compatibility inputs for existing local/Helm environments. The
+# runtime now imports installed detectron2 and worker.mamt2_runtime normally;
+# neither legacy path participates in module resolution or startup validation.
+DETECTRON2_ROOT = (
+    Path(os.environ["MAMT2_DETECTRON2_ROOT"])
+    if os.environ.get("MAMT2_DETECTRON2_ROOT")
+    else None
+)
+MAMT2_MAIN = (
+    Path(os.environ["MAMT2_MAIN_DIR"])
+    if os.environ.get("MAMT2_MAIN_DIR")
+    else None
+)
 CONFIG_PATH = Path(os.environ.get(
     "MAMT2_CONFIG_PATH",
-    str(DEFAULT_STACK_ROOT / "mamt2-artifacts" / "configs" / "config_ubuntu.yaml"),
+    str(MODEL_ROOT / "config.yaml"),
 ))
 WEIGHT_PATH = Path(os.environ.get(
     "MAMT2_WEIGHT_PATH",
-    str(DEFAULT_STACK_ROOT / "mamt2-artifacts" / "weights" / "model_best_segm.pth"),
+    str(MODEL_ROOT / "model_best_segm.pth"),
 ))
 DEFAULT_OUTPUT_DIR = Path(os.environ.get(
     "MAMT2_OUTPUT_DIR",
-    str(DEFAULT_STACK_ROOT / "mamt2-cloud-shm" / "runtime" / "worker_outputs"),
+    str(PROJECT_ROOT / "runtime" / "worker_outputs"),
 ))
 CLASS_ID_TO_LABEL = {0: "spalling"}
 
@@ -51,8 +56,6 @@ class MAMT2OutputError(RuntimeError):
 
 def _validate_startup_paths() -> None:
     required_paths = {
-        "MAMT2_DETECTRON2_ROOT": DETECTRON2_ROOT,
-        "MAMT2_MAIN_DIR": MAMT2_MAIN,
         "MAMT2_CONFIG_PATH": CONFIG_PATH,
         "MAMT2_WEIGHT_PATH": WEIGHT_PATH,
         "MAMT2_OUTPUT_DIR": DEFAULT_OUTPUT_DIR,
@@ -71,11 +74,6 @@ def _validate_startup_paths() -> None:
 
 _validate_startup_paths()
 
-for _path in (DETECTRON2_ROOT, MAMT2_MAIN):
-    _path_str = str(_path)
-    if _path_str not in sys.path:
-        sys.path.insert(0, _path_str)
-
 _RUNTIME: dict[str, Any] | None = None
 _RUNTIME_ERROR: Exception | None = None
 _PREDICTOR: "MAMT2Predictor | None" = None
@@ -89,8 +87,8 @@ def _load_runtime() -> dict[str, Any]:
         return _RUNTIME
     if _RUNTIME_ERROR is not None:
         raise RuntimeError(
-            "MAMT2 runtime import failed. Please run in the General conda environment "
-            "with detectron2, torch, timm, cv2, and project paths available."
+            "MAMT2 runtime import failed. Confirm detectron2, torch, timm, and cv2 "
+            "are installed in the Worker environment."
         ) from _RUNTIME_ERROR
 
     try:
@@ -99,7 +97,7 @@ def _load_runtime() -> dict[str, Any]:
         import torch
         from detectron2.data import MetadataCatalog
         from detectron2.utils.visualizer import ColorMode, Visualizer
-        from infer_supportdata_v3 import (
+        from worker.mamt2_runtime.infer_supportdata_v3 import (
             build_cfg,
             build_predictor_like,
             imread_unicode,
@@ -109,9 +107,9 @@ def _load_runtime() -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         _RUNTIME_ERROR = exc
         raise RuntimeError(
-            "Failed to import MAMT2 runtime dependencies. Confirm the General conda "
+            "Failed to import MAMT2 runtime dependencies. Confirm the Worker "
             "environment can import detectron2, torch, timm, cv2, and "
-            "detectron2/projects/MAMT2_main/infer_supportdata_v3.py."
+            "worker.mamt2_runtime.infer_supportdata_v3."
         ) from exc
 
     _RUNTIME = {

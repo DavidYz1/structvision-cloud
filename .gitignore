@@ -6,6 +6,8 @@ __pycache__/
 .venv/
 env/
 .env
+.env.*
+!.env.example
 
 # VSCode
 .vscode/
@@ -14,7 +16,13 @@ env/
 backend/app/uploads/*
 backend/app/outputs/*
 runtime/
-model/
+
+# Model runtime metadata is tracked; model binaries are never tracked.
+model/*
+!model/config.yaml
+!model/labels.json
+!model/manifest.yaml
+!model/README.md
 
 # keep folder
 !backend/app/uploads/.gitkeep
@@ -22,7 +30,59 @@ model/
 
 # Model artifacts
 *.pth
+*.pt
+*.ckpt
 *.pkl
+*.onnx
+*.safetensors
+*.whl
+
+# Raw imagery and dataset archives must be published outside Git.
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.webp
+*.tif
+*.tiff
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*_annotations.json
+instances_*.json
+
+# Dataset, annotation, experiment, and generated-output directories.
+data/
+dataset/
+datasets/
+annotations/
+images/
+JPEGImages/
+**/data/
+**/dataset/
+**/datasets/
+**/annotations/
+**/images/
+**/JPEGImages/
+outputs/
+worker_outputs/
+
+# Local credentials and parent-workspace artifacts.
+*.token
+*.secret
+*.key
+*.pem
+.hf_token
+.netrc
+token
+tokens/
+secrets/
+credentials/
+.huggingface/
+.cache/huggingface/
+mamt2-artifacts/
+detectron2/
 
 # Node
 frontend/node_modules/

@@ -1,0 +1,26 @@
+schema_version: 1
+model:
+  id: structvision-spalling
+  task: instance-segmentation
+  repository: DavidYz/structvision-spalling
+  revision: 0b33cdd893b789316ee0a6ce5b5ccc639028c02d
+  filename: model_best_segm.pth
+  sha256: ea1a4e99731f7755598a59527ca782a30c48c08df57d6a61bcd5e95f377be0e2
+  sizeBytes: 573160381
+  targetPath: /models/model_best_segm.pth
+  config: config.yaml
+  labels: labels.json
+runtime:
+  image_tag: mamt2-worker:hf-v1
+  python: "3.12.3"
+  pytorch: 2.11.0+cu128
+  torchvision: 0.26.0+cu128
+  cuda: "12.8"
+  gpu_architectures:
+    - sm_86
+detectron2:
+  version: "0.6"
+  wheel:
+    filename: detectron2-0.6-cp312-cp312-linux_x86_64.whl
+    url: https://github.com/DavidYz1/structvision-cloud/releases/download/runtime-deps-v1/detectron2-0.6-cp312-cp312-linux_x86_64.whl
+    sha256: eb7295b6cb477467cb03660ea024a11ab13e97fc12b157040b9234897f809ace
