@@ -6,8 +6,8 @@ tokens must not be committed here.
 
 The runtime expects `model_best_segm.pth` from the public Hugging Face repository
 `DavidYz/structvision-spalling`. Before use, the file must match the SHA256 in
-`manifest.yaml`. The model revision is temporarily `main` and must be pinned to
-an immutable Hugging Face commit during the model-download phase.
+`manifest.yaml`. The manifest and Helm download URL pin the model to the same
+immutable Hugging Face commit revision.
 
 `config.yaml` is the container inference configuration migrated without semantic
 changes from the external artifact directory. Dataset names retained in the

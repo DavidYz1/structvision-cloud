@@ -3,9 +3,11 @@ model:
   id: structvision-spalling
   task: instance-segmentation
   repository: DavidYz/structvision-spalling
-  revision: main
+  revision: 0b33cdd893b789316ee0a6ce5b5ccc639028c02d
   filename: model_best_segm.pth
   sha256: ea1a4e99731f7755598a59527ca782a30c48c08df57d6a61bcd5e95f377be0e2
+  sizeBytes: 573160381
+  targetPath: /models/model_best_segm.pth
   config: config.yaml
   labels: labels.json
 runtime:

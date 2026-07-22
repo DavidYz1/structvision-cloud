@@ -11,7 +11,7 @@ Browser
   -> backend Service / FastAPI
   -> mamt2-worker Service / GPU Worker
   -> Detectron2 + MAMT2 + CUDA
-  -> mamt2-model-pvc
+  -> mamt2-model PVC
 ```
 
 详细设计见 [docs/architecture.md](docs/architecture.md)，监控操作见 [monitoring/README.md](monitoring/README.md)。
@@ -24,7 +24,8 @@ Browser
 - **Backend**：FastAPI API，接收上传文件、同步调用 GPU Worker、保存 Worker 返回的结果图，并通过 `/results/{filename}` 提供结果。
 - **GPU Worker**：FastAPI + Detectron2/MAMT2 推理服务，通过 `/predict-file` 接收 Backend 上传的图片；模型首次使用时懒加载到 GPU。
 - **Ingress**：`mamt2-ingress` 使用 ingress-nginx 将外部流量转发到 `frontend` Service。
-- **PVC**：`mamt2-model-pvc` 保存 `model_best_segm.pth`，以只读方式挂载到 Worker 的 `/models`。
+- **模型交付**：Helm Init Container 从固定 Hugging Face revision 首次下载权重，执行 SHA256 完整性校验，并通过临时文件和原子 `mv` 写入模型 PVC；Pod 重建时复用 PVC 缓存，也可按需配置下载代理。
+- **PVC**：Chart 默认创建模型 PVC；Init Container 以可写方式挂载，Worker 以只读方式挂载到 `/models`。也可通过 `worker.model.existingClaim` 复用外部 PVC。
 - **ConfigMap**：`mamt2-config` 为 Backend 提供 `USE_REAL_MAMT2` 和 `MAMT2_WORKER_URL`。
 
 ### 可观测性组件
@@ -58,6 +59,35 @@ nvidia.com/gpu: 1
 
 当前 Minikube 节点只有一张可调度 GPU，Worker 因而固定为单副本。Worker Deployment 使用 `Recreate`，更新时先终止旧 Pod，再创建新 Pod。若使用默认 RollingUpdate，旧 Pod 占用唯一 GPU 时，新 Pod 会因为无法获得第二张 GPU 而长期 Pending，滚动发布无法完成。`Recreate` 同时避免两个模型进程争用同一 GPU 显存。
 
+## 模型权重自动配置
+
+Chart 默认在模型 PVC 中检查 `model_best_segm.pth`。首次部署时，如果 PVC 中没有校验通过的权重，`model-weight-downloader` Init Container 会从公开 Hugging Face 仓库的固定 revision 下载到同一 PVC 的唯一临时文件，校验 SHA256 后通过原子 `mv` 写入正式路径。后续 Pod 重启会校验已有文件并跳过重复下载。
+
+下载、网络访问或 SHA256 校验失败时，Init Container 非零退出，Worker 不会启动；错误可从 Init Container 日志中查看。目标部署环境必须能够访问配置的 Hugging Face 仓库，且该仓库必须允许部署者下载对应 revision。
+
+下载代理默认关闭：
+
+```yaml
+worker:
+  model:
+    download:
+      proxy:
+        enabled: false
+```
+
+云服务器能够直接访问 Hugging Face 时不需要代理。本地 Minikube 网络受限时，可按需使用以下示例；`host.minikube.internal:2081` 仅表示宿主机上的本地代理，并非默认配置或云环境要求：
+
+```bash
+helm upgrade --install mamt2 helm \
+  -n mamt2 \
+  --create-namespace \
+  --set worker.model.download.proxy.enabled=true \
+  --set-string worker.model.download.proxy.httpProxy=http://host.minikube.internal:2081 \
+  --set-string worker.model.download.proxy.httpsProxy=http://host.minikube.internal:2081
+```
+
+`ingress.enabled=false` 只关闭入站 Ingress，不控制 Pod 的外网访问，也不能替代上述下载代理配置。
+
 ## 仓库结构
 
 ```text
@@ -81,7 +111,7 @@ docs/                         架构和模型集成文档
 - Minikube
 - kubectl
 - Helm 3
-- 可供 Worker 镜像构建使用的 MAMT2、Detectron2 和模型配置构建上下文
+- 构建 Worker 镜像时能够访问固定版本的 Detectron2 wheel 下载地址
 - 不提交到 Git 的 `model_best_segm.pth`
 
 ## 本地 Minikube 部署
@@ -114,29 +144,17 @@ docker build -t mamt2-worker:hf-v1 -f worker/Dockerfile.hf .
 
 旁路 `worker/Dockerfile.hf` 使用当前仓库作为构建上下文。MAMT2 在线 runtime 和推理配置位于仓库内；固定版本的 Detectron2 wheel 从版本化 GitHub Release URL 下载并强制校验 SHA256。模型权重不进入构建上下文或镜像，仍在运行时挂载。原 `worker/Dockerfile` 暂留作旧链路基线，不用于 `hf-v1`。该 GPU 镜像较大，暂不在 CI 中构建。
 
-### 3. 创建 Namespace、PVC 并加载模型权重
+### 3. 使用 Helm 直连部署应用
 
 ```bash
-kubectl create namespace mamt2 --dry-run=client -o yaml | kubectl apply -f -
-kubectl apply -f k8s/worker-pvc.yaml
-kubectl apply -f k8s/model-loader-pod.yaml
-kubectl wait --namespace mamt2 --for=condition=Ready pod/mamt2-model-loader --timeout=120s
-kubectl cp /path/to/model_best_segm.pth \
-  mamt2/mamt2-model-loader:/models/model_best_segm.pth
-kubectl delete pod mamt2-model-loader --namespace mamt2
-```
-
-### 4. 使用 Helm 部署应用
-
-```bash
-helm upgrade --install mamt2 ./helm \
-  --namespace mamt2 \
+helm upgrade --install mamt2 helm \
+  -n mamt2 \
   --create-namespace
 ```
 
-默认资源名称保持稳定：`frontend`、`backend`、`mamt2-worker`、`mamt2-config`、`mamt2-ingress`。
+默认配置直接访问 Hugging Face，并自动创建模型 PVC、下载和校验权重。默认资源名称保持稳定：`frontend`、`backend`、`mamt2-worker`、`mamt2-config`、`mamt2-ingress`。
 
-### 5. 配置本地域名
+### 4. 配置本地域名
 
 ```bash
 echo "$(minikube --profile mamt2 ip) mamt2.test" | sudo tee -a /etc/hosts
@@ -200,6 +218,8 @@ kubectl get pods,services,ingress,pvc --namespace mamt2
 kubectl rollout status deployment/frontend --namespace mamt2
 kubectl rollout status deployment/backend --namespace mamt2
 kubectl rollout status deployment/mamt2-worker --namespace mamt2 --timeout=10m
+kubectl logs deployment/mamt2-worker --namespace mamt2 \
+  --container model-weight-downloader
 kubectl get endpoints --namespace mamt2 backend mamt2-worker
 ```
 
@@ -249,6 +269,19 @@ kubectl logs --namespace mamt2 \
   --selector app=mamt2-worker \
   --follow
 ```
+
+模型权重下载：
+
+```bash
+kubectl logs deployment/mamt2-worker --namespace mamt2 \
+  --container model-weight-downloader
+kubectl get pods,pvc --namespace mamt2
+kubectl rollout status deployment/mamt2-worker --namespace mamt2 --timeout=10m
+```
+
+- `curl: (7)` 通常表示 DNS、路由、防火墙或代理等网络出口问题。
+- HTTP `401` 通常表示 Hugging Face 仓库或目标 revision 的访问权限不满足。
+- SHA256 校验失败表示下载文件与 Chart 中固定的模型清单不一致；Worker 会保持在 Init 阶段，不加载该文件。
 
 Backend 到 Worker 调用：
 
