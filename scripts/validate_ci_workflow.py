@@ -12,6 +12,10 @@ import yaml
 
 EXPRESSION_PATTERN = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
 ALLOWED_EXPRESSION_CONTEXTS = ("github.", "inputs.", "matrix.")
+ACTION_REFERENCE_PATTERN = re.compile(
+    r"^\s*uses:\s*[^@\s]+@(?P<revision>[^\s#]+)",
+    re.MULTILINE,
+)
 
 
 def require(condition: bool, message: str) -> None:
@@ -83,6 +87,10 @@ def main() -> None:
             isinstance(job, dict) and "timeout-minutes" in job,
             f"job {job_name} must set timeout-minutes",
         )
+        require(
+            job.get("runs-on") == "ubuntu-24.04",
+            f"job {job_name} must use the fixed ubuntu-24.04 runner label",
+        )
         timeout = int(job["timeout-minutes"])
         require(1 <= timeout <= 60, f"job {job_name} timeout is unreasonable")
 
@@ -98,6 +106,30 @@ def main() -> None:
     require("packages:" not in text, "packages permission must not be present")
     require("secrets." not in text, "workflow must not reference secrets")
     require("github.token" not in text, "workflow must not reference github.token")
+    require(
+        "python scripts/validate_reproducibility.py" in text,
+        "reproducible build input validation must run in CI",
+    )
+    require(
+        "pip install --require-hashes -r backend/requirements-test.txt" in text,
+        "Backend CI must enforce hashes from the dependency lock",
+    )
+    require(
+        text.count(
+            "pip install --require-hashes -r scripts/requirements-ci.txt"
+        )
+        == 2,
+        "quality and Worker layout jobs must use the hashed CI tool lock",
+    )
+
+    action_revisions = ACTION_REFERENCE_PATTERN.findall(text)
+    require(action_revisions, "workflow must use external actions")
+    for revision in action_revisions:
+        require(
+            re.fullmatch(r"[0-9a-f]{40}", revision) is not None,
+            f"action reference must use a full commit SHA: {revision}",
+        )
+
     worker_image = jobs.get("worker-image")
     require(worker_image is not None, "manual Worker image job is required")
     require(

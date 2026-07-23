@@ -1,4 +1,5 @@
-__pycache__/
-*.pyc
-app/uploads/*
-app/outputs/*
+**
+!Dockerfile
+!requirements.txt
+!app/
+!app/*.py

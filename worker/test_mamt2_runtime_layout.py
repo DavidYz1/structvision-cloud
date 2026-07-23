@@ -106,6 +106,13 @@ class RuntimeLayoutTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("python /tmp/install_detectron2_wheel.py", dockerfile)
+        self.assertIn(
+            "python /tmp/validate_base_packages.py /tmp/base-packages-docker.txt",
+            dockerfile,
+        )
+        self.assertIn("--require-hashes", dockerfile)
+        self.assertIn("--no-deps", dockerfile)
+        self.assertIn("--no-build-isolation", dockerfile)
         self.assertNotIn("COPY mamt2-artifacts", dockerfile)
         self.assertNotIn("COPY detectron2", dockerfile)
 

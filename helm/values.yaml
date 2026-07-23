@@ -106,6 +106,7 @@ worker:
       image:
         repository: curlimages/curl
         tag: 8.14.1
+        digest: sha256:9a1ed35addb45476afa911696297f8e115993df459278ed036182dd2cd22b67b
         pullPolicy: IfNotPresent
       url: https://huggingface.co/DavidYz/structvision-spalling/resolve/0b33cdd893b789316ee0a6ce5b5ccc639028c02d/model_best_segm.pth?download=true
       proxy:

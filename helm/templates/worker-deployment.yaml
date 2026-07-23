@@ -24,7 +24,7 @@ spec:
 
       initContainers:
         - name: model-weight-downloader
-          image: "{{ .Values.worker.model.download.image.repository }}:{{ .Values.worker.model.download.image.tag }}"
+          image: "{{ .Values.worker.model.download.image.repository }}:{{ .Values.worker.model.download.image.tag }}@{{ .Values.worker.model.download.image.digest }}"
           imagePullPolicy: {{ .Values.worker.model.download.image.pullPolicy }}
           command:
             - /bin/sh

@@ -1,0 +1,9 @@
+# Direct Backend runtime dependencies.
+# Regenerate requirements.txt with the pinned pip-tools command documented in
+# docs/reproducible-builds.md; do not edit the generated lock by hand.
+fastapi==0.139.2
+uvicorn==0.51.0
+python-multipart==0.0.32
+pillow==12.3.0
+requests==2.34.2
+prometheus-client==0.25.0

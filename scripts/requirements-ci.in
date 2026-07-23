@@ -1,0 +1,2 @@
+# Direct Python dependency for lightweight CI validation scripts.
+PyYAML==6.0.3
