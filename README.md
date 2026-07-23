@@ -149,6 +149,8 @@ docker build -t mamt2-worker:hf-v1 -f worker/Dockerfile.hf .
 
 Frontend、Backend、Worker 的权威依赖文件、基础镜像 digest、外部产物来源和更新方法见 [依赖与构建输入](docs/reproducible-builds.md)。
 
+GHCR 的候选/版本发布入口、权限边界、包可见性和 digest 使用方式见 [GHCR 镜像发布](docs/ghcr-images.md)。当前仓库变更只建立发布机制，不代表三个镜像已经发布。
+
 ### 3A. 使用 Helm 部署应用（推荐）
 
 ```bash

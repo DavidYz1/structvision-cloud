@@ -47,6 +47,11 @@ jobs:
       - name: Validate GitHub Actions workflow structure
         run: python scripts/validate_ci_workflow.py .github/workflows/ci.yml
 
+      - name: Validate GHCR publication workflow
+        run: |
+          python scripts/validate_publish_workflow.py \
+            .github/workflows/publish-images.yml
+
       - name: Validate reproducible build inputs
         run: python scripts/validate_reproducibility.py
 
@@ -131,9 +136,16 @@ jobs:
           fi
 
           if git grep -nEi \
-            '(secrets\.|github\.token|authorization:[[:space:]]*bearer|begin [a-z ]*private key)' \
+            '(secrets\.|github\.token)' \
+            -- .github/workflows/ci.yml; then
+            echo "Regular CI must not reference credentials"
+            exit 1
+          fi
+
+          if git grep -nEi \
+            '(authorization:[[:space:]]*bearer|begin [a-z ]*private key)' \
             -- .github/workflows; then
-            echo "Workflow credential or private-key marker found"
+            echo "Workflow credential literal or private-key marker found"
             exit 1
           fi
 

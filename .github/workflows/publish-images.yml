@@ -1,0 +1,209 @@
+name: Publish GHCR images
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate_source:
+    name: Validate publication source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      sha_tag: ${{ steps.source.outputs.sha_tag }}
+      version: ${{ steps.source.outputs.version }}
+      version_tag: ${{ steps.source.outputs.version_tag }}
+
+    steps:
+      - name: Check out complete history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate ref and resolve commit
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          commit="$(git rev-parse HEAD)"
+          if [[ ! "${commit}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Expected a full Git commit SHA, got: ${commit}" >&2
+            exit 1
+          fi
+
+          sha_tag="sha-${commit}"
+          version_tag=""
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+              echo "Manual image publication is only allowed from main" >&2
+              exit 1
+            fi
+            version="${sha_tag}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            if [[ "${GITHUB_REF_TYPE}" != "tag" ]] \
+              || [[ ! "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Image publication tags must match v<major>.<minor>.<patch>" >&2
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor \
+              "${commit}" refs/remotes/origin/main; then
+              echo "The tagged commit has not been merged into main" >&2
+              exit 1
+            fi
+            version="${GITHUB_REF_NAME}"
+            version_tag="${GITHUB_REF_NAME}"
+          else
+            echo "Unsupported publication event: ${GITHUB_EVENT_NAME}" >&2
+            exit 1
+          fi
+
+          {
+            echo "commit=${commit}"
+            echo "sha_tag=${sha_tag}"
+            echo "version=${version}"
+            echo "version_tag=${version_tag}"
+          } >> "${GITHUB_OUTPUT}"
+
+  publish:
+    name: Publish ${{ matrix.component }}
+    needs: validate_source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: Frontend
+            image: ghcr.io/davidyz1/structvision-frontend
+            context: frontend
+            dockerfile: frontend/Dockerfile
+            description: StructVision Cloud web frontend
+          - component: Backend
+            image: ghcr.io/davidyz1/structvision-backend
+            context: backend
+            dockerfile: backend/Dockerfile
+            description: StructVision Cloud API backend
+          - component: Worker
+            image: ghcr.io/davidyz1/structvision-worker
+            context: .
+            dockerfile: worker/Dockerfile.hf
+            description: StructVision Cloud GPU inference worker
+
+    steps:
+      - name: Check out validated commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.validate_source.outputs.commit }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare immutable-source tags
+        id: refs
+        shell: bash
+        env:
+          IMAGE: ${{ matrix.image }}
+          SHA_TAG: ${{ needs.validate_source.outputs.sha_tag }}
+          VERSION_TAG: ${{ needs.validate_source.outputs.version_tag }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo "tags<<EOF"
+            if [[ -n "${VERSION_TAG}" ]]; then
+              echo "${IMAGE}:${VERSION_TAG}"
+            fi
+            echo "${IMAGE}:${SHA_TAG}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+          if [[ -n "${VERSION_TAG}" ]]; then
+            echo "summary_tags=${IMAGE}:${VERSION_TAG}, ${IMAGE}:${SHA_TAG}" \
+              >> "${GITHUB_OUTPUT}"
+          else
+            echo "summary_tags=${IMAGE}:${SHA_TAG}" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Build and publish image
+        id: publish
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.refs.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.validate_source.outputs.commit }}
+            org.opencontainers.image.version=${{ needs.validate_source.outputs.version }}
+            org.opencontainers.image.description=${{ matrix.description }}
+          provenance: false
+          sbom: false
+
+      - name: Verify published registry digest
+        id: verify
+        shell: bash
+        env:
+          IMAGE: ${{ matrix.image }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "${DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Invalid registry digest: ${DIGEST}" >&2
+            exit 1
+          fi
+
+          echo "Published registry digest: ${DIGEST}"
+          docker buildx imagetools inspect "${IMAGE}@${DIGEST}"
+
+      - name: Write publication summary
+        if: ${{ always() && steps.verify.outcome == 'success' }}
+        shell: bash
+        env:
+          COMPONENT: ${{ matrix.component }}
+          IMAGE: ${{ matrix.image }}
+          COMMIT: ${{ needs.validate_source.outputs.commit }}
+          SHA_TAG: ${{ needs.validate_source.outputs.sha_tag }}
+          TAGS: ${{ steps.refs.outputs.summary_tags }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          {
+            echo "### ${COMPONENT} image"
+            echo
+            echo "| Field | Published value |"
+            echo "| --- | --- |"
+            echo "| Image | \`${IMAGE}\` |"
+            echo "| Commit | \`${COMMIT}\` |"
+            echo "| Tag(s) | \`${TAGS}\` |"
+            echo "| Registry digest | \`${DIGEST}\` |"
+            echo
+            echo "\`${SHA_TAG}\` identifies the source commit; " \
+              "only \`${DIGEST}\` is the immutable image content identifier."
+          } >> "${GITHUB_STEP_SUMMARY}"
