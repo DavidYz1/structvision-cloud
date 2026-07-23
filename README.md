@@ -149,15 +149,28 @@ docker build -t mamt2-worker:hf-v1 -f worker/Dockerfile.hf .
 
 Frontend、Backend、Worker 的权威依赖文件、基础镜像 digest、外部产物来源和更新方法见 [依赖与构建输入](docs/reproducible-builds.md)。
 
-GHCR 的候选/版本发布入口、权限边界、包可见性和 digest 使用方式见 [GHCR 镜像发布](docs/ghcr-images.md)。当前仓库变更只建立发布机制，不代表三个镜像已经发布。
+GHCR 的候选/版本发布入口、权限边界、公开候选 digest 和更新方式见 [GHCR 镜像发布](docs/ghcr-images.md)。
 
 ### 3A. 使用 Helm 部署应用（推荐）
+
+默认 values 保持本地 Minikube 镜像兼容：
 
 ```bash
 helm upgrade --install mamt2 helm \
   -n mamt2 \
   --create-namespace
 ```
+
+使用公开 GHCR 候选进行正式的 digest 固定部署：
+
+```bash
+helm upgrade --install structvision helm \
+  -n structvision \
+  --create-namespace \
+  -f helm/values-release.yaml
+```
+
+`values-release.yaml` 中的 `sha-<commit>` tag 用于人工识别来源；Deployment 实际使用 `repository@sha256:...`，digest 才是 Kubernetes 拉取的不可变内容标识。三个 GHCR Package 必须保持 public。
 
 默认配置直接访问 Hugging Face，并自动创建模型 PVC、下载和校验权重。默认资源名称保持稳定：`frontend`、`backend`、`mamt2-worker`、`mamt2-config`、`mamt2-ingress`。
 
@@ -172,7 +185,7 @@ helm upgrade --install mamt2 helm \
 
 ### 3B. 使用原生 Kubernetes 清单（不使用 Helm）
 
-原生清单提供与 Helm 相同的 Frontend、Backend、GPU Worker、ConfigMap、模型 PVC 和自动权重配置。当前三个应用镜像尚未发布到 GHCR，因此必须先按第 2 步将 `mamt2-frontend:v1`、`mamt2-backend:v1` 和 `mamt2-worker:hf-v1` 构建到目标 Minikube 节点；这些清单暂时不是可从公共镜像仓库直接部署的交付物。
+原生清单提供与 Helm 相同的 Frontend、Backend、GPU Worker、ConfigMap、模型 PVC 和自动权重配置，但仍明确保留本地镜像引用。使用原生入口时必须先按第 2 步构建 `mamt2-frontend:v1`、`mamt2-backend:v1` 和 `mamt2-worker:hf-v1`；需要公开 GHCR digest 的部署应使用上面的 Helm `values-release.yaml`。
 
 先可靠创建 Namespace，再一次应用目录中的全部核心资源：
 

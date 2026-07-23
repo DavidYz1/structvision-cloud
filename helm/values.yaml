@@ -7,6 +7,7 @@ frontend:
   image:
     repository: mamt2-frontend
     tag: v1
+    digest: ""
     pullPolicy: IfNotPresent
 
   containerPort: 80
@@ -38,6 +39,7 @@ backend:
   image:
     repository: mamt2-backend
     tag: v1
+    digest: ""
     pullPolicy: IfNotPresent
 
   containerPort: 8000
@@ -73,6 +75,7 @@ worker:
   image:
     repository: mamt2-worker
     tag: hf-v1
+    digest: ""
     pullPolicy: Never
 
   containerPort: 9000

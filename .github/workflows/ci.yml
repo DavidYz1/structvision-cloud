@@ -83,6 +83,10 @@ jobs:
             --set-string worker.model.download.proxy.httpsProxy=http://proxy.example.invalid:3128 \
             > "${RUNNER_TEMP}/proxy-enabled.yaml"
 
+          helm template structvision helm -n structvision-release-test \
+            -f helm/values-release.yaml \
+            > "${RUNNER_TEMP}/release.yaml"
+
       - name: Verify proxy required values
         shell: bash
         run: |
@@ -107,13 +111,42 @@ jobs:
             "worker.model.download.proxy.httpsProxy is required" \
             "${RUNNER_TEMP}/missing-https-proxy.txt"
 
+      - name: Verify application image reference validation
+        shell: bash
+        run: |
+          for component in frontend backend worker; do
+            if helm template mamt2 helm -n mamt2 \
+              --set-string "${component}.image.digest=sha256:INVALID" \
+              > /dev/null 2> "${RUNNER_TEMP}/${component}-invalid-digest.txt"; then
+              echo "${component} unexpectedly accepted an invalid digest"
+              exit 1
+            fi
+
+            if helm template mamt2 helm -n mamt2 \
+              --set-string "${component}.image.tag=latest" \
+              > /dev/null 2> "${RUNNER_TEMP}/${component}-latest.txt"; then
+              echo "${component} unexpectedly accepted latest"
+              exit 1
+            fi
+
+            if helm template mamt2 helm -n mamt2 \
+              --set-string "${component}.image.tag=" \
+              --set-string "${component}.image.digest=" \
+              > /dev/null 2> "${RUNNER_TEMP}/${component}-missing-ref.txt"; then
+              echo "${component} unexpectedly accepted no tag and no digest"
+              exit 1
+            fi
+          done
+
       - name: Validate Helm and raw Kubernetes semantics
         run: |
           python scripts/validate_manifests.py \
             --default "${RUNNER_TEMP}/default.yaml" \
             --service-monitor-disabled "${RUNNER_TEMP}/service-monitor-disabled.yaml" \
             --dashboard-disabled "${RUNNER_TEMP}/dashboard-disabled.yaml" \
-            --proxy-enabled "${RUNNER_TEMP}/proxy-enabled.yaml"
+            --proxy-enabled "${RUNNER_TEMP}/proxy-enabled.yaml" \
+            --release "${RUNNER_TEMP}/release.yaml" \
+            --release-values helm/values-release.yaml
 
       - name: Check repository safety boundaries
         shell: bash
