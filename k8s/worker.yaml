@@ -6,6 +6,9 @@ metadata:
 spec:
   replicas: 1
 
+  strategy:
+    type: Recreate
+
   selector:
     matchLabels:
       app: mamt2-worker
@@ -20,9 +23,94 @@ spec:
         fsGroup: 1000
         fsGroupChangePolicy: OnRootMismatch
 
+      initContainers:
+        - name: model-weight-downloader
+          image: curlimages/curl:8.14.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              set -eu
+
+              expected_target="${MODEL_MOUNT_PATH%/}/${MODEL_FILENAME}"
+              if [ "${MODEL_TARGET_PATH}" != "${expected_target}" ]; then
+                echo "Model target path does not match mountPath/filename: ${MODEL_TARGET_PATH}" >&2
+                exit 1
+              fi
+
+              case "${MODEL_URL}" in
+                *"/resolve/${MODEL_REVISION}/${MODEL_FILENAME}"*) ;;
+                *)
+                  echo "Model URL is not pinned to revision ${MODEL_REVISION} and filename ${MODEL_FILENAME}" >&2
+                  exit 1
+                  ;;
+              esac
+
+              if [ -f "${MODEL_TARGET_PATH}" ] && \
+                 printf '%s  %s\n' "${MODEL_SHA256}" "${MODEL_TARGET_PATH}" | sha256sum -c - >/dev/null 2>&1; then
+                echo "Model weight checksum verified; skipping download: ${MODEL_TARGET_PATH}"
+                exit 0
+              fi
+
+              if [ -e "${MODEL_TARGET_PATH}" ]; then
+                echo "Existing model weight failed checksum validation; downloading a verified replacement"
+              else
+                echo "Model weight is absent; downloading pinned revision ${MODEL_REVISION}"
+              fi
+
+              temp_file="$(mktemp "${MODEL_TARGET_PATH}.part.XXXXXX")"
+              trap 'rm -f "${temp_file}"' EXIT HUP INT TERM
+
+              curl \
+                --fail \
+                --location \
+                --show-error \
+                --silent \
+                --retry 5 \
+                --retry-delay 2 \
+                --retry-all-errors \
+                --connect-timeout 30 \
+                --output "${temp_file}" \
+                "${MODEL_URL}"
+
+              if ! printf '%s  %s\n' "${MODEL_SHA256}" "${temp_file}" | sha256sum -c -; then
+                echo "Downloaded model weight failed SHA256 validation" >&2
+                exit 1
+              fi
+
+              chmod 0444 "${temp_file}"
+              mv -f "${temp_file}" "${MODEL_TARGET_PATH}"
+              trap - EXIT HUP INT TERM
+              echo "Model weight installed atomically: ${MODEL_TARGET_PATH}"
+          env:
+            - name: MODEL_REPOSITORY
+              value: DavidYz/structvision-spalling
+            - name: MODEL_REVISION
+              value: 0b33cdd893b789316ee0a6ce5b5ccc639028c02d
+            - name: MODEL_FILENAME
+              value: model_best_segm.pth
+            - name: MODEL_SHA256
+              value: ea1a4e99731f7755598a59527ca782a30c48c08df57d6a61bcd5e95f377be0e2
+            - name: MODEL_URL
+              value: https://huggingface.co/DavidYz/structvision-spalling/resolve/0b33cdd893b789316ee0a6ce5b5ccc639028c02d/model_best_segm.pth?download=true
+            - name: MODEL_MOUNT_PATH
+              value: /models
+            - name: MODEL_TARGET_PATH
+              value: /models/model_best_segm.pth
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+              readOnly: false
+
       containers:
         - name: worker
-          image: mamt2-worker:v1
+          image: mamt2-worker:hf-v1
           imagePullPolicy: Never
 
           ports:
@@ -32,13 +120,13 @@ spec:
 
           env:
             - name: MAMT2_DETECTRON2_ROOT
-              value: /opt/detectron2
+              value: /opt/venv/lib/python3.12/site-packages
 
             - name: MAMT2_MAIN_DIR
-              value: /opt/MAMT2_main
+              value: /app/worker/mamt2_runtime
 
             - name: MAMT2_CONFIG_PATH
-              value: /app/config/config_container.yaml
+              value: /app/model/config.yaml
 
             - name: MAMT2_WEIGHT_PATH
               value: /models/model_best_segm.pth
@@ -95,7 +183,7 @@ spec:
       volumes:
         - name: model-storage
           persistentVolumeClaim:
-            claimName: mamt2-model-pvc
+            claimName: mamt2-model
 
         - name: output-storage
           emptyDir: {}
@@ -106,6 +194,8 @@ kind: Service
 metadata:
   name: mamt2-worker
   namespace: mamt2
+  labels:
+    app: mamt2-worker
 spec:
   selector:
     app: mamt2-worker

@@ -1,16 +1,30 @@
 name: CI
 
 on:
-  push:
   pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      build_worker:
+        description: Build the large Worker image without pushing
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  validate:
-    name: Python, Dashboard, and Helm validation
+  quality:
+    name: Repository, Python, Helm, and manifest validation
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
@@ -21,11 +35,17 @@ jobs:
         with:
           python-version: "3.10"
 
+      - name: Install lightweight validation dependency
+        run: python -m pip install PyYAML==6.0.3
+
       - name: Compile Python sources
-        run: python -m compileall backend worker
+        run: python -m compileall backend worker scripts
 
       - name: Validate Grafana Dashboard JSON
         run: python -m json.tool helm/dashboards/structvision-overview.json > /dev/null
+
+      - name: Validate GitHub Actions workflow structure
+        run: python scripts/validate_ci_workflow.py .github/workflows/ci.yml
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
@@ -35,41 +55,82 @@ jobs:
       - name: Lint Helm Chart
         run: helm lint helm
 
-      - name: Render default Helm Chart
-        run: helm template mamt2 helm -n mamt2 > "${RUNNER_TEMP}/default.yaml"
-
-      - name: Verify default observability resources
+      - name: Render Helm validation variants
         shell: bash
         run: |
-          service_monitor_count="$(grep -c '^kind: ServiceMonitor$' "${RUNNER_TEMP}/default.yaml")"
-          dashboard_count="$(grep -c '^  name: structvision-grafana-dashboard$' "${RUNNER_TEMP}/default.yaml")"
+          helm template mamt2 helm -n mamt2 \
+            > "${RUNNER_TEMP}/default.yaml"
 
-          test "${service_monitor_count}" -eq 2
-          test "${dashboard_count}" -eq 1
-          grep -q '^    grafana_dashboard: "1"$' "${RUNNER_TEMP}/default.yaml"
-          grep -q '^  structvision-overview.json: |$' "${RUNNER_TEMP}/default.yaml"
-
-      - name: Verify ServiceMonitor disable switch
-        shell: bash
-        run: |
           helm template mamt2 helm -n mamt2 \
             --set monitoring.serviceMonitor.enabled=false \
             > "${RUNNER_TEMP}/service-monitor-disabled.yaml"
 
-          if grep -q '^kind: ServiceMonitor$' "${RUNNER_TEMP}/service-monitor-disabled.yaml"; then
-            echo "ServiceMonitor rendered while monitoring.serviceMonitor.enabled=false"
-            exit 1
-          fi
-
-      - name: Verify Dashboard disable switch
-        shell: bash
-        run: |
           helm template mamt2 helm -n mamt2 \
             --set monitoring.grafanaDashboard.enabled=false \
             > "${RUNNER_TEMP}/dashboard-disabled.yaml"
 
-          if grep -q '^  name: structvision-grafana-dashboard$' "${RUNNER_TEMP}/dashboard-disabled.yaml"; then
-            echo "Dashboard ConfigMap rendered while monitoring.grafanaDashboard.enabled=false"
+          helm template mamt2 helm -n mamt2 \
+            --set worker.model.download.proxy.enabled=true \
+            --set-string worker.model.download.proxy.httpProxy=http://proxy.example.invalid:3128 \
+            --set-string worker.model.download.proxy.httpsProxy=http://proxy.example.invalid:3128 \
+            > "${RUNNER_TEMP}/proxy-enabled.yaml"
+
+      - name: Verify proxy required values
+        shell: bash
+        run: |
+          if helm template mamt2 helm -n mamt2 \
+            --set worker.model.download.proxy.enabled=true \
+            > /dev/null 2> "${RUNNER_TEMP}/missing-http-proxy.txt"; then
+            echo "Helm rendering unexpectedly accepted an enabled proxy without addresses"
+            exit 1
+          fi
+          grep -Fq \
+            "worker.model.download.proxy.httpProxy is required" \
+            "${RUNNER_TEMP}/missing-http-proxy.txt"
+
+          if helm template mamt2 helm -n mamt2 \
+            --set worker.model.download.proxy.enabled=true \
+            --set-string worker.model.download.proxy.httpProxy=http://proxy.example.invalid:3128 \
+            > /dev/null 2> "${RUNNER_TEMP}/missing-https-proxy.txt"; then
+            echo "Helm rendering unexpectedly accepted an enabled proxy without HTTPS_PROXY"
+            exit 1
+          fi
+          grep -Fq \
+            "worker.model.download.proxy.httpsProxy is required" \
+            "${RUNNER_TEMP}/missing-https-proxy.txt"
+
+      - name: Validate Helm and raw Kubernetes semantics
+        run: |
+          python scripts/validate_manifests.py \
+            --default "${RUNNER_TEMP}/default.yaml" \
+            --service-monitor-disabled "${RUNNER_TEMP}/service-monitor-disabled.yaml" \
+            --dashboard-disabled "${RUNNER_TEMP}/dashboard-disabled.yaml" \
+            --proxy-enabled "${RUNNER_TEMP}/proxy-enabled.yaml"
+
+      - name: Check repository safety boundaries
+        shell: bash
+        run: |
+          if git ls-files '*.pth' '*.pt' '*.ckpt' '*.onnx' '*.safetensors' | grep -q .; then
+            echo "Tracked model weight found"
+            exit 1
+          fi
+
+          if git ls-files | grep -Eiq '\.(key|pem|p12|pfx)$'; then
+            echo "Tracked private-key file found"
+            exit 1
+          fi
+
+          if git grep -nE \
+            '(host\.minikube\.internal:2081|127\.0\.0\.1:10808)' \
+            -- helm k8s .github; then
+            echo "Banned local proxy endpoint found in deployment defaults or workflows"
+            exit 1
+          fi
+
+          if git grep -nEi \
+            '(secrets\.|github\.token|authorization:[[:space:]]*bearer|begin [a-z ]*private key)' \
+            -- .github/workflows; then
+            echo "Workflow credential or private-key marker found"
             exit 1
           fi
 
@@ -82,3 +143,136 @@ jobs:
             echo "Trailing whitespace found"
             exit 1
           fi
+
+  frontend:
+    name: Frontend lint and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Build production assets
+        run: npm run build
+
+  backend:
+    name: Backend lightweight tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      PYTHONPATH: backend
+      USE_REAL_MAMT2: "false"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-test.txt
+
+      - name: Install Backend test dependencies
+        run: python -m pip install -r backend/requirements-test.txt
+
+      - name: Compile Backend sources
+        run: python -m compileall backend
+
+      - name: Run Backend unit tests
+        run: python -m unittest discover -s backend/tests -v
+
+  worker-layout:
+    name: Worker static runtime layout
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install lightweight test dependency
+        run: python -m pip install PyYAML==6.0.3
+
+      - name: Run Worker layout tests
+        run: python -m unittest worker.test_mamt2_runtime_layout -v
+
+  worker-image:
+    name: Build Worker image (manual only)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_worker }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs:
+      - quality
+      - worker-layout
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build Worker image without pushing
+        run: |
+          docker build \
+            --file worker/Dockerfile.hf \
+            --tag mamt2-worker:ci \
+            .
+
+  image-builds:
+    name: Build ${{ matrix.component }} image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - quality
+      - frontend
+      - backend
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: Frontend
+            context: frontend
+            dockerfile: frontend/Dockerfile
+            image: mamt2-frontend:ci
+          - component: Backend
+            context: backend
+            dockerfile: backend/Dockerfile
+            image: mamt2-backend:ci
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build image without pushing
+        run: |
+          docker build \
+            --file "${{ matrix.dockerfile }}" \
+            --tag "${{ matrix.image }}" \
+            "${{ matrix.context }}"

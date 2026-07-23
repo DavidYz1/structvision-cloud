@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: mamt2-model-pvc
+  name: mamt2-model
   namespace: mamt2
 spec:
   accessModes:

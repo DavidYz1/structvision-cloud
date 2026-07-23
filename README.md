@@ -2,7 +2,7 @@
 
 StructVision Cloud 是一个 **Kubernetes-native GPU visual inference platform**，用于结构表观病害检测与实例分割。系统将 React 前端、FastAPI API、NVIDIA GPU Worker、MAMT2/Detectron2 推理、模型 PVC 和 Prometheus/Grafana 可观测性组合为可声明部署的完整链路。
 
-当前 v1.0 面向单节点、单 GPU Minikube 环境，真实请求链路已经贯通：
+当前 v0.8.0 面向单节点、单 GPU Minikube 环境，真实请求链路已经贯通：
 
 ```text
 Browser
@@ -24,7 +24,7 @@ Browser
 - **Backend**：FastAPI API，接收上传文件、同步调用 GPU Worker、保存 Worker 返回的结果图，并通过 `/results/{filename}` 提供结果。
 - **GPU Worker**：FastAPI + Detectron2/MAMT2 推理服务，通过 `/predict-file` 接收 Backend 上传的图片；模型首次使用时懒加载到 GPU。
 - **Ingress**：`mamt2-ingress` 使用 ingress-nginx 将外部流量转发到 `frontend` Service。
-- **模型交付**：Helm Init Container 从固定 Hugging Face revision 首次下载权重，执行 SHA256 完整性校验，并通过临时文件和原子 `mv` 写入模型 PVC；Pod 重建时复用 PVC 缓存，也可按需配置下载代理。
+- **模型交付**：Helm 与原生 Kubernetes 清单均通过 Init Container 从固定 Hugging Face revision 首次下载权重，执行 SHA256 完整性校验，并通过唯一临时文件和原子 `mv` 写入模型 PVC；Pod 重建时复用 PVC 缓存。
 - **PVC**：Chart 默认创建模型 PVC；Init Container 以可写方式挂载，Worker 以只读方式挂载到 `/models`。也可通过 `worker.model.existingClaim` 复用外部 PVC。
 - **ConfigMap**：`mamt2-config` 为 Backend 提供 `USE_REAL_MAMT2` 和 `MAMT2_WORKER_URL`。
 
@@ -61,7 +61,7 @@ nvidia.com/gpu: 1
 
 ## 模型权重自动配置
 
-Chart 默认在模型 PVC 中检查 `model_best_segm.pth`。首次部署时，如果 PVC 中没有校验通过的权重，`model-weight-downloader` Init Container 会从公开 Hugging Face 仓库的固定 revision 下载到同一 PVC 的唯一临时文件，校验 SHA256 后通过原子 `mv` 写入正式路径。后续 Pod 重启会校验已有文件并跳过重复下载。
+Helm Chart 和原生 Kubernetes 清单都会在模型 PVC 中检查 `model_best_segm.pth`。首次部署时，如果 PVC 中没有校验通过的权重，`model-weight-downloader` Init Container 会从公开 Hugging Face 仓库的固定 revision 下载到同一 PVC 的唯一临时文件，校验 SHA256 后通过原子 `mv` 写入正式路径。后续 Pod 重启会校验已有文件并跳过重复下载。
 
 下载、网络访问或 SHA256 校验失败时，Init Container 非零退出，Worker 不会启动；错误可从 Init Container 日志中查看。目标部署环境必须能够访问配置的 Hugging Face 仓库，且该仓库必须允许部署者下载对应 revision。
 
@@ -75,16 +75,18 @@ worker:
         enabled: false
 ```
 
-云服务器能够直接访问 Hugging Face 时不需要代理。本地 Minikube 网络受限时，可按需使用以下示例；`host.minikube.internal:2081` 仅表示宿主机上的本地代理，并非默认配置或云环境要求：
+云服务器能够直接访问 Hugging Face 时不需要代理。网络受限时可按需使用以下占位示例，并将地址替换为部署环境实际可用的代理：
 
 ```bash
 helm upgrade --install mamt2 helm \
   -n mamt2 \
   --create-namespace \
   --set worker.model.download.proxy.enabled=true \
-  --set-string worker.model.download.proxy.httpProxy=http://host.minikube.internal:2081 \
-  --set-string worker.model.download.proxy.httpsProxy=http://host.minikube.internal:2081
+  --set-string worker.model.download.proxy.httpProxy=http://proxy.example.invalid:3128 \
+  --set-string worker.model.download.proxy.httpsProxy=http://proxy.example.invalid:3128
 ```
+
+原生清单默认直连，不包含 `HTTP_PROXY`、`HTTPS_PROXY` 或对应的小写变量。如确需代理，只应在应用清单前为 `k8s/worker.yaml` 的 `model-weight-downloader` Init Container 增加这些变量；不要把代理变量加入 Worker 主容器、Backend 或 Frontend。示例地址 `proxy.example.invalid` 是明确的占位值，不能直接用于部署。
 
 `ingress.enabled=false` 只关闭入站 Ingress，不控制 Pod 的外网访问，也不能替代上述下载代理配置。
 
@@ -97,7 +99,8 @@ worker/                       GPU Worker、MAMT2 适配和 Worker 指标
 helm/                         应用 Helm Chart
   dashboards/                Grafana Dashboard JSON
   templates/                 Deployment、Service、Ingress、监控资源
-k8s/                          PVC 和模型加载等辅助清单
+k8s/                          不使用 Helm 时的原生 Kubernetes 部署入口
+  optional/                   可选 Ingress 和 ServiceMonitor
 monitoring/                   Prometheus/Grafana 与 DCGM values、操作文档
 docs/                         架构和模型集成文档
 .github/workflows/ci.yml      静态检查与 Helm 渲染 CI
@@ -144,7 +147,7 @@ docker build -t mamt2-worker:hf-v1 -f worker/Dockerfile.hf .
 
 旁路 `worker/Dockerfile.hf` 使用当前仓库作为构建上下文。MAMT2 在线 runtime 和推理配置位于仓库内；固定版本的 Detectron2 wheel 从版本化 GitHub Release URL 下载并强制校验 SHA256。模型权重不进入构建上下文或镜像，仍在运行时挂载。原 `worker/Dockerfile` 暂留作旧链路基线，不用于 `hf-v1`。该 GPU 镜像较大，暂不在 CI 中构建。
 
-### 3. 使用 Helm 直连部署应用
+### 3A. 使用 Helm 部署应用（推荐）
 
 ```bash
 helm upgrade --install mamt2 helm \
@@ -154,6 +157,43 @@ helm upgrade --install mamt2 helm \
 
 默认配置直接访问 Hugging Face，并自动创建模型 PVC、下载和校验权重。默认资源名称保持稳定：`frontend`、`backend`、`mamt2-worker`、`mamt2-config`、`mamt2-ingress`。
 
+Helm 默认渲染 ServiceMonitor；集群尚未安装 Prometheus Operator CRD 时，通过以下参数关闭它：
+
+```bash
+helm upgrade --install mamt2 helm \
+  -n mamt2 \
+  --create-namespace \
+  --set monitoring.serviceMonitor.enabled=false
+```
+
+### 3B. 使用原生 Kubernetes 清单（不使用 Helm）
+
+原生清单提供与 Helm 相同的 Frontend、Backend、GPU Worker、ConfigMap、模型 PVC 和自动权重配置。当前三个应用镜像尚未发布到 GHCR，因此必须先按第 2 步将 `mamt2-frontend:v1`、`mamt2-backend:v1` 和 `mamt2-worker:hf-v1` 构建到目标 Minikube 节点；这些清单暂时不是可从公共镜像仓库直接部署的交付物。
+
+先可靠创建 Namespace，再一次应用目录中的全部核心资源：
+
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/
+```
+
+`kubectl apply -f` 默认不递归子目录，因此上面的核心安装不会应用 `k8s/optional/`。
+
+首次部署时，Worker Init Container 会下载固定 revision 的权重、执行 SHA256 校验，并只在校验成功后原子写入 `mamt2-model` PVC。后续部署会校验并复用缓存；下载或校验失败时 Worker 主容器不会启动，且只会读取最终的 `/models/model_best_segm.pth`。
+
+原生 Ingress 是显式可选资源；不应用该文件就等价于 Helm 的 `ingress.enabled=false`：
+
+```bash
+kubectl apply -f k8s/optional/ingress.yaml
+```
+
+ServiceMonitor 依赖 Prometheus Operator CRD，不在核心目录安装流程中。确认 CRD 已存在后再应用：
+
+```bash
+kubectl get crd servicemonitors.monitoring.coreos.com
+kubectl apply -f k8s/optional/servicemonitors.yaml
+```
+
 ### 4. 配置本地域名
 
 ```bash
@@ -161,7 +201,7 @@ echo "$(minikube --profile mamt2 ip) mamt2.test" | sudo tee -a /etc/hosts
 curl http://mamt2.test/api/
 ```
 
-浏览器访问 `http://mamt2.test`。
+应用 Helm 默认 Ingress 或原生可选 Ingress 后，浏览器访问 `http://mamt2.test`。
 
 ## 安装监控
 
@@ -191,6 +231,8 @@ helm upgrade --install dcgm-exporter nvidia/dcgm-exporter \
 ```bash
 helm upgrade --install mamt2 ./helm --namespace mamt2
 ```
+
+使用原生清单时，Dashboard ConfigMap 仍由 Helm 管理；只需在 Prometheus Operator CRD 就绪后单独应用 `k8s/optional/servicemonitors.yaml`，即可抓取 Backend 和 Worker 的 `/metrics`。
 
 ## Grafana Dashboard
 
@@ -249,6 +291,7 @@ python3 -m compileall backend worker
 python3 -m json.tool helm/dashboards/structvision-overview.json > /dev/null
 helm lint helm
 helm template mamt2 helm -n mamt2 > /tmp/mamt2-rendered.yaml
+kubectl apply --dry-run=client --validate=false -f k8s/
 ```
 
 ## 故障排查
@@ -326,4 +369,4 @@ kubectl logs --namespace monitoring \
 
 ## CI
 
-GitHub Actions CI 执行 Python 语法检查、Dashboard JSON 解析、Helm lint、默认/关闭监控资源的模板断言和空白格式检查。CI 不构建 GPU Worker 镜像、不连接 Kubernetes、不执行 CUDA 推理，也不下载模型权重。
+GitHub Actions CI 在 pull request、`main` push 和手动触发时执行 Python 语法检查、Backend 轻量单元测试、Frontend lockfile 安装/ESLint/生产构建、Dashboard JSON、Helm 开关与代理断言、原生清单语义比较、仓库安全边界和空白检查，并构建但不推送 Frontend/Backend 镜像。默认 Worker job 只运行无需重依赖的 runtime layout 检查；约 8.5 GB 的 Worker 镜像仅在手动执行工作流并显式启用 `build_worker` 时构建且不推送。CI 不连接 Kubernetes、不执行 CUDA 推理，也不下载模型权重。

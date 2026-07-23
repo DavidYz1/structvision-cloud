@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import tempfile
 import unittest
@@ -15,11 +16,14 @@ from worker.install_detectron2_wheel import (
     WHEEL_URL,
     verify_wheel,
 )
-from worker.mamt2_runtime.infer_supportdata_v3 import build_cfg
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MODEL_DIR = REPO_ROOT / "model"
+HAS_INFERENCE_RUNTIME = all(
+    importlib.util.find_spec(module_name) is not None
+    for module_name in ("cv2", "detectron2")
+)
 
 
 class RuntimeLayoutTests(unittest.TestCase):
@@ -30,8 +34,13 @@ class RuntimeLayoutTests(unittest.TestCase):
             "489eaf6e23f155fcbb3ac71a9fe82596aade5d45efbedbb47ca760cf79785c54",
         )
 
+    @unittest.skipUnless(
+        HAS_INFERENCE_RUNTIME,
+        "requires the Worker image inference runtime",
+    )
     def test_config_loads_without_dataset_registration(self):
         from detectron2.data import DatasetCatalog
+        from worker.mamt2_runtime.infer_supportdata_v3 import build_cfg
 
         registered_before = set(DatasetCatalog.list())
         args = Namespace(
