@@ -111,6 +111,11 @@ def main() -> None:
         "reproducible build input validation must run in CI",
     )
     require(
+        "python scripts/validate_publish_workflow.py" in text
+        and ".github/workflows/publish-images.yml" in text,
+        "GHCR publication workflow validation must run in CI",
+    )
+    require(
         "pip install --require-hashes -r backend/requirements-test.txt" in text,
         "Backend CI must enforce hashes from the dependency lock",
     )
