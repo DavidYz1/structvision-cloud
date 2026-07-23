@@ -369,4 +369,4 @@ kubectl logs --namespace monitoring \
 
 ## CI
 
-GitHub Actions CI 执行 Python 语法检查、Dashboard JSON 解析、Helm lint、默认/关闭监控资源的模板断言和空白格式检查。CI 不构建 GPU Worker 镜像、不连接 Kubernetes、不执行 CUDA 推理，也不下载模型权重。
+GitHub Actions CI 在 pull request、`main` push 和手动触发时执行 Python 语法检查、Backend 轻量单元测试、Frontend lockfile 安装/ESLint/生产构建、Dashboard JSON、Helm 开关与代理断言、原生清单语义比较、仓库安全边界和空白检查，并构建但不推送 Frontend/Backend 镜像。默认 Worker job 只运行无需重依赖的 runtime layout 检查；约 8.5 GB 的 Worker 镜像仅在手动执行工作流并显式启用 `build_worker` 时构建且不推送。CI 不连接 Kubernetes、不执行 CUDA 推理，也不下载模型权重。
