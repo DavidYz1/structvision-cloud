@@ -20,6 +20,12 @@ runtime:
     - sm_86
 detectron2:
   version: "0.6"
+  source:
+    repository: https://github.com/facebookresearch/detectron2.git
+    revision: b599f139756bd3646a26a909caf86a1a159e53a7
+    patch:
+      path: worker/detectron2-0.6-container.patch
+      sha256: ab60789dc5b99e3902cf7288e7ebf4a431e0feb5c837ab8a7ef3bb31933e2e6d
   wheel:
     filename: detectron2-0.6-cp312-cp312-linux_x86_64.whl
     url: https://github.com/DavidYz1/structvision-cloud/releases/download/runtime-deps-v1/detectron2-0.6-cp312-cp312-linux_x86_64.whl

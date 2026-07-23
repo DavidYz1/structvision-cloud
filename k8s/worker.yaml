@@ -25,7 +25,7 @@ spec:
 
       initContainers:
         - name: model-weight-downloader
-          image: curlimages/curl:8.14.1
+          image: curlimages/curl:8.14.1@sha256:9a1ed35addb45476afa911696297f8e115993df459278ed036182dd2cd22b67b
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh

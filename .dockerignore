@@ -7,7 +7,9 @@
 !worker/mamt2_predictor.py
 !worker/mamt2_worker_api.py
 !worker/metrics.py
+!worker/base-packages-docker.txt
 !worker/requirements-docker.txt
+!worker/validate_base_packages.py
 !worker/mamt2_runtime/
 !worker/mamt2_runtime/__init__.py
 !worker/mamt2_runtime/config/

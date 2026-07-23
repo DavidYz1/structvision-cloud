@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime
+FROM pytorch/pytorch:2.11.0-cuda12.8-cudnn9-runtime@sha256:eee11b3b3872a8c838e35ef48f08b2d5def2080902c7f666831310ca1a0ef2be
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -33,12 +33,18 @@ print('CUDA runtime:', torch.version.cuda)"
 
 WORKDIR /app
 
-# 先安装固定版本的 Worker Python 依赖
-COPY mamt2-cloud-shm/worker/requirements-docker.txt \
-     /tmp/requirements-docker.txt
+# 先核对固定基础镜像提供的包，再安装带 artifact SHA256 的 Worker 依赖。
+COPY mamt2-cloud-shm/worker/base-packages-docker.txt \
+     mamt2-cloud-shm/worker/requirements-docker.txt \
+     mamt2-cloud-shm/worker/validate_base_packages.py \
+     /tmp/
 
-RUN python -m pip install \
+RUN python /tmp/validate_base_packages.py /tmp/base-packages-docker.txt \
+    && python -m pip install \
         --no-cache-dir \
+        --require-hashes \
+        --no-deps \
+        --no-build-isolation \
         -r /tmp/requirements-docker.txt
 
 # 安装已编译并验证的 Detectron2 wheel

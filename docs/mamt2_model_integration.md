@@ -221,13 +221,13 @@ curl -X POST http://127.0.0.1:9000/predict-file \
 
 ## Worker 环境依赖说明
 
-`backend/requirements.txt` 是轻量 API 依赖，只包含 FastAPI 主后端需要的包，例如 `fastapi`、`uvicorn`、`python-multipart`、`pillow`、`requests`。
+`backend/requirements.in` 是人工维护的轻量 API 直接依赖；`backend/requirements.txt` 是镜像与 CI 实际安装的、包含传递依赖和 SHA256 的生成锁文件。
 
-`worker/requirements.txt` 是重型 MAMT2 Worker 依赖说明，包含 PyTorch、Detectron2 生态、timm、OpenCV、COCO 工具和 Detectron2 常用基础库。
+正式 GPU 镜像以 `worker/requirements-docker.in` 维护直接依赖；`worker/base-packages-docker.txt` 固定并验证 PyTorch CUDA 基础镜像已有包，`worker/requirements-docker.txt` 固定其余实际下载的包及 artifact SHA256。PyTorch/torchvision 来自固定 digest 的基础镜像，Detectron2 来自固定 URL 和 SHA256 的 wheel。
 
 当前 Windows 本地真实推理使用已有 Conda 环境 `General`。未来 Ubuntu/Docker 阶段建议创建独立的 `mamt2-worker` 环境，不建议继续复用 `General`。
 
-不要直接提交完整 `General` 环境的 `pip freeze` 结果；它通常包含大量本机无关包、Windows 特定包和临时实验依赖。应基于 `worker/environment.yml` 和 `worker/requirements.txt` 在目标 Ubuntu/CUDA 环境中逐步固定版本。
+不要直接提交完整 `General` 环境的 `pip freeze` 结果；它通常包含大量本机无关包、Windows 特定包和临时实验依赖。`worker/environment.yml` 与 `worker/requirements.txt` 仅保留为本地/Conda 开发输入，不参与 `Dockerfile.hf`。正式依赖边界和更新方法见 `docs/reproducible-builds.md`。
 
 未来 Ubuntu 环境模板：
 
