@@ -1,6 +1,6 @@
 # GHCR 镜像发布
 
-本页描述 v0.9.0 的镜像发布机制。仓库中的工作流和文档变更本身不会发布镜像；只有合并到 `main` 后人工运行发布工作流，或推送符合要求的版本标签，才会写入 GHCR。
+本页描述 v0.9.0 的镜像发布与 Helm 不可变部署机制。当前候选镜像已经通过人工工作流从 `main` 发布并设为 public；尚未创建 `v0.9.0` Git 标签或 GitHub Release。
 
 ## 镜像与构建入口
 
@@ -11,6 +11,37 @@
 | Worker | `ghcr.io/davidyz1/structvision-worker` | 仓库根目录 | `worker/Dockerfile.hf` | `linux/amd64` |
 
 Worker 镜像不包含模型权重。运行时仍由 Kubernetes initContainer 从固定 Hugging Face repo/revision 下载固定文件，校验 SHA256 后写入 PVC。
+
+## 当前 Helm 候选
+
+`helm/values-release.yaml` 固定同一提交发布的三个候选：
+
+| 组件 | 可读 tag | 不可变 registry digest |
+| --- | --- | --- |
+| Frontend | `sha-89aae47a8e267bb5c8a5060f1d40c999ae039579` | `sha256:6a198d8b6ae506151867bac9eac1e15270ca0bd44ca63b5493d75ef8ca481431` |
+| Backend | `sha-89aae47a8e267bb5c8a5060f1d40c999ae039579` | `sha256:655c7edad8b0c6b11a77e167ae2e520dc32bf58edb94696b95779f01895d9217` |
+| Worker | `sha-89aae47a8e267bb5c8a5060f1d40c999ae039579` | `sha256:8d8068e739886d64f9c554c1c849ac27b04d6004b51c57d85f87efc5d09bf1d2` |
+
+tag 用于人类识别源码版本；当 digest 非空时，Helm Deployment 实际渲染为 `repository@sha256:...`，tag 不参与 Kubernetes 的镜像内容选择。
+
+使用公开候选进行安装或升级：
+
+```bash
+helm upgrade --install structvision helm \
+  --namespace structvision \
+  --create-namespace \
+  --values helm/values-release.yaml
+```
+
+这条命令假设三个 GHCR Package 均保持 public；公开包可由集群节点匿名拉取，不需要 `imagePullSecret`。默认 `helm/values.yaml` 仍使用明确的本地 tag，供 Minikube 和本地构建流程使用。
+
+发布新候选后，按以下顺序更新：
+
+1. 从三个 publish matrix Job Summary 取得同一个 40 位 commit tag 和各自 digest；
+2. 确认三个 GHCR Package 为 public，并用 `image@sha256:...` 做只读检查；
+3. 在 `helm/values-release.yaml` 中成组替换三个 `tag` 和 `digest`；
+4. 保持 repository 不变，且不要写入 `latest`；
+5. 运行 `helm lint`、默认渲染、release 渲染和 manifest 校验，审阅 Deployment 的最终 image。
 
 ## 两种发布方式
 
@@ -50,7 +81,7 @@ sha-<40 位 Git commit SHA>
 3. 检查包是否已关联当前仓库；
 4. 如包仍为 private，在每个包的 **Package settings** 中确认后改为 public。
 
-GHCR 包首次发布时默认可能是 private。三个包都必须单独确认；包设为 public 后，干净环境可以匿名执行 `docker pull`。GitHub 当前不允许把已经公开的包重新改回 private，因此变更可见性前应再次核对包名和内容。
+GHCR 包首次发布时默认可能是 private。三个包都必须单独确认；包设为 public 后，干净环境和 Kubernetes 节点可以匿名拉取。GitHub 当前不允许把已经公开的包重新改回 private，因此变更可见性前应再次核对包名和内容。
 
 GitHub 官方说明：
 
@@ -74,7 +105,7 @@ ghcr.io/davidyz1/structvision-backend@sha256:<digest>
 ghcr.io/davidyz1/structvision-worker@sha256:<digest>
 ```
 
-下一阶段修改 Helm 镜像配置时，应为三个组件使用 `repository + digest`，而不是依赖 `latest` 或仅依赖版本 tag。当前阶段不修改 Helm values、原生 Kubernetes 清单或集群。
+Helm 的正式配置使用 `repository + digest`，而不是依赖 `latest` 或仅依赖版本 tag。原生 Kubernetes 清单仍保持本地开发入口，本轮没有修改它们或任何集群。
 
 ## 发布 Action 来源
 

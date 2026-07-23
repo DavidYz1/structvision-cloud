@@ -116,6 +116,12 @@ def main() -> None:
         "GHCR publication workflow validation must run in CI",
     )
     require(
+        "-f helm/values-release.yaml" in text
+        and '--release "${RUNNER_TEMP}/release.yaml"' in text
+        and "--release-values helm/values-release.yaml" in text,
+        "release digest values and render must be validated in CI",
+    )
+    require(
         "pip install --require-hashes -r backend/requirements-test.txt" in text,
         "Backend CI must enforce hashes from the dependency lock",
     )

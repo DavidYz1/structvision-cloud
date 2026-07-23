@@ -120,7 +120,7 @@ spec:
 
       containers:
         - name: worker
-          image: "{{ .Values.worker.image.repository }}:{{ .Values.worker.image.tag }}"
+          image: {{ include "helm.imageReference" (dict "component" "worker" "image" .Values.worker.image) | quote }}
           imagePullPolicy: {{ .Values.worker.image.pullPolicy }}
 
           ports:

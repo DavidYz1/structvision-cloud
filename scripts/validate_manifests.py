@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,25 @@ PROXY_ENV_NAMES = {
     "http_proxy",
     "https_proxy",
     "no_proxy",
+}
+DIGEST_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
+SHA_TAG_PATTERN = re.compile(r"sha-([0-9a-f]{40})")
+RELEASE_IMAGES = {
+    "frontend": {
+        "repository": "ghcr.io/davidyz1/structvision-frontend",
+        "deployment": "frontend",
+        "container": "frontend",
+    },
+    "backend": {
+        "repository": "ghcr.io/davidyz1/structvision-backend",
+        "deployment": "backend",
+        "container": "backend",
+    },
+    "worker": {
+        "repository": "ghcr.io/davidyz1/structvision-worker",
+        "deployment": "mamt2-worker",
+        "container": "worker",
+    },
 }
 
 
@@ -224,6 +244,88 @@ def validate_raw_alignment(
     )
 
 
+def validate_release_images(
+    release: dict[tuple[str, str], dict[str, Any]],
+    release_values: dict[str, Any],
+) -> None:
+    commits: set[str] = set()
+    rendered_images: set[str] = set()
+
+    for component, expected in RELEASE_IMAGES.items():
+        image_values = release_values.get(component, {}).get("image", {})
+        repository = image_values.get("repository")
+        tag = image_values.get("tag")
+        digest = image_values.get("digest")
+
+        require(
+            repository == expected["repository"],
+            f"release {component} repository must be {expected['repository']}",
+        )
+        require(
+            isinstance(tag, str) and tag.lower() != "latest",
+            f"release {component} tag must exist and must not be latest",
+        )
+        tag_match = SHA_TAG_PATTERN.fullmatch(tag)
+        require(
+            tag_match is not None,
+            f"release {component} tag must identify a full Git commit",
+        )
+        commits.add(tag_match.group(1))
+        require(
+            isinstance(digest, str)
+            and DIGEST_PATTERN.fullmatch(digest) is not None,
+            f"release {component} digest must be sha256 plus 64 lowercase hex characters",
+        )
+        require(
+            image_values.get("pullPolicy") in {"IfNotPresent", "Always"},
+            f"release {component} pullPolicy is invalid",
+        )
+
+        deployment = release[
+            ("Deployment", expected["deployment"])
+        ]
+        containers = deployment["spec"]["template"]["spec"]["containers"]
+        matches = [
+            container
+            for container in containers
+            if container["name"] == expected["container"]
+        ]
+        require(
+            len(matches) == 1,
+            f"release {component} Deployment container is missing",
+        )
+        rendered_image = matches[0]["image"]
+        expected_image = f"{repository}@{digest}"
+        require(
+            rendered_image == expected_image,
+            f"release {component} must render repository@digest",
+        )
+        require(
+            tag not in rendered_image,
+            f"release {component} tag must not select image content",
+        )
+        rendered_images.add(rendered_image)
+
+    require(
+        len(commits) == 1,
+        "all release image tags must identify the same Git commit",
+    )
+    require(
+        len(rendered_images) == len(RELEASE_IMAGES),
+        "release render must contain three distinct immutable images",
+    )
+    require(
+        all(
+            image.startswith("ghcr.io/davidyz1/structvision-")
+            and "@sha256:" in image
+            and "mamt2-" not in image
+            and ":dev" not in image
+            for image in rendered_images
+        ),
+        "release render contains a local, dev, or digest-less image",
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--default", required=True, type=Path)
@@ -234,6 +336,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dashboard-disabled", required=True, type=Path)
     parser.add_argument("--proxy-enabled", required=True, type=Path)
+    parser.add_argument("--release", required=True, type=Path)
+    parser.add_argument("--release-values", required=True, type=Path)
     return parser.parse_args()
 
 
@@ -247,6 +351,14 @@ def main() -> None:
         load_yaml_file(args.dashboard_disabled)
     )
     proxy_enabled = resource_index(load_yaml_file(args.proxy_enabled))
+    release = resource_index(load_yaml_file(args.release))
+    release_values = yaml.safe_load(
+        args.release_values.read_text(encoding="utf-8")
+    )
+    require(
+        isinstance(release_values, dict),
+        "release values must be a YAML mapping",
+    )
 
     validate_observability(
         default,
@@ -255,10 +367,11 @@ def main() -> None:
     )
     validate_proxy(default, proxy_enabled)
     validate_raw_alignment(default)
+    validate_release_images(release, release_values)
 
     print(
         "Manifest validation passed: Helm switches, proxy isolation, "
-        "raw core/optional YAML, and Worker downloader logic"
+        "raw core/optional YAML, Worker downloader logic, and release digests"
     )
 
 

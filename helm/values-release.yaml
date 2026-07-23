@@ -1,0 +1,24 @@
+# Public linux/amd64 candidate images published from commit
+# 89aae47a8e267bb5c8a5060f1d40c999ae039579.
+# Tags aid human traceability; the digests below select immutable image content.
+
+frontend:
+  image:
+    repository: ghcr.io/davidyz1/structvision-frontend
+    tag: sha-89aae47a8e267bb5c8a5060f1d40c999ae039579
+    digest: sha256:6a198d8b6ae506151867bac9eac1e15270ca0bd44ca63b5493d75ef8ca481431
+    pullPolicy: IfNotPresent
+
+backend:
+  image:
+    repository: ghcr.io/davidyz1/structvision-backend
+    tag: sha-89aae47a8e267bb5c8a5060f1d40c999ae039579
+    digest: sha256:655c7edad8b0c6b11a77e167ae2e520dc32bf58edb94696b95779f01895d9217
+    pullPolicy: IfNotPresent
+
+worker:
+  image:
+    repository: ghcr.io/davidyz1/structvision-worker
+    tag: sha-89aae47a8e267bb5c8a5060f1d40c999ae039579
+    digest: sha256:8d8068e739886d64f9c554c1c849ac27b04d6004b51c57d85f87efc5d09bf1d2
+    pullPolicy: IfNotPresent
