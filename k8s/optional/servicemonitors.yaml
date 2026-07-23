@@ -1,0 +1,36 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: backend
+  namespace: mamt2
+spec:
+  namespaceSelector:
+    matchNames:
+      - mamt2
+  selector:
+    matchLabels:
+      app: backend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mamt2-worker
+  namespace: mamt2
+spec:
+  namespaceSelector:
+    matchNames:
+      - mamt2
+  selector:
+    matchLabels:
+      app: mamt2-worker
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s

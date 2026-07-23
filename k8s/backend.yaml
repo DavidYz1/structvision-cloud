@@ -53,6 +53,8 @@ kind: Service
 metadata:
   name: backend
   namespace: mamt2
+  labels:
+    app: backend
 spec:
   type: ClusterIP
 
