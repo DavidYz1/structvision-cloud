@@ -88,6 +88,9 @@ detectron2/
 frontend/node_modules/
 frontend/dist/
 
+# Locust result CSV and HTML reports.
+tests/load/results/
+
 # OS
 .DS_Store
 Thumbs.db

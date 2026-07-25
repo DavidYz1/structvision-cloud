@@ -313,6 +313,8 @@ helm template mamt2 helm -n mamt2 > /tmp/mamt2-rendered.yaml
 kubectl apply --dry-run=client --validate=false -f k8s/
 ```
 
+GPU 推理压测的依赖安装、预热、30/50 用户运行方式和服务器观察命令见 [`tests/load/README.md`](tests/load/README.md)。
+
 ## 故障排查
 
 Worker 调度与 GPU：
