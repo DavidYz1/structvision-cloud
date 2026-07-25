@@ -31,7 +31,7 @@ spec:
 
           readinessProbe:
             httpGet:
-              path: /
+              path: /readyz
               port: 8000
             initialDelaySeconds: 2
             periodSeconds: 5
@@ -40,12 +40,12 @@ spec:
 
           livenessProbe:
             httpGet:
-              path: /
+              path: /healthz
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 3
-            failureThreshold: 3
+            failureThreshold: 12
 
 ---
 apiVersion: v1
