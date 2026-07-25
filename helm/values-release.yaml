@@ -1,6 +1,7 @@
-# Public linux/amd64 candidate images published from commit
-# 89aae47a8e267bb5c8a5060f1d40c999ae039579.
-# Tags aid human traceability; the digests below select immutable image content.
+# Immutable linux/amd64 release image pins.
+# Frontend and Worker remain on commit 89aae47a8e267bb5c8a5060f1d40c999ae039579.
+# Backend includes the async Worker call and health-probe fix from
+# commit de2022fd7027803242de8ad1cf11161b746e1096.
 
 frontend:
   image:
@@ -12,8 +13,8 @@ frontend:
 backend:
   image:
     repository: ghcr.io/davidyz1/structvision-backend
-    tag: sha-89aae47a8e267bb5c8a5060f1d40c999ae039579
-    digest: sha256:655c7edad8b0c6b11a77e167ae2e520dc32bf58edb94696b95779f01895d9217
+    tag: sha-de2022fd7027803242de8ad1cf11161b746e1096
+    digest: sha256:6956e04e31ce6378b353f798b3065c4bfbe1efd142ea06b866055aa604290af2
     pullPolicy: IfNotPresent
 
 worker:
