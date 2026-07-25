@@ -54,18 +54,18 @@ backend:
     workerUrl: "http://mamt2-worker:9000"
 
   readinessProbe:
-    path: /
+    path: /readyz
     initialDelaySeconds: 2
     periodSeconds: 5
     timeoutSeconds: 3
     failureThreshold: 6
 
   livenessProbe:
-    path: /
+    path: /healthz
     initialDelaySeconds: 10
     periodSeconds: 10
     timeoutSeconds: 3
-    failureThreshold: 3
+    failureThreshold: 12
 
   resources: {}
 

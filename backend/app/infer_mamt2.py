@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import binascii
 import os
@@ -5,7 +6,7 @@ from pathlib import Path
 import time
 import uuid
 
-import requests
+import httpx
 from PIL import Image, ImageDraw
 
 from app.metrics import WORKER_CALL_DURATION_SECONDS, WORKER_CALLS_TOTAL
@@ -98,7 +99,7 @@ def predict_image_mock(image_path: str) -> dict:
     }
 
 
-def _parse_worker_json_response(response: requests.Response, endpoint: str) -> dict:
+def _parse_worker_json_response(response: httpx.Response, endpoint: str) -> dict:
     if response.status_code != 200:
         raise WorkerInvalidResponseError(
             f"MAMT2 Worker returned HTTP {response.status_code}: {response.text}"
@@ -127,7 +128,10 @@ def _require_worker_response_keys(data: dict, required_keys: list[str]) -> None:
         )
 
 
-def predict_image_via_worker_path(image_path: str) -> dict:
+async def predict_image_via_worker_path(
+    image_path: str,
+    client: httpx.AsyncClient,
+) -> dict:
     """Call the standalone MAMT2 Worker path endpoint for local debugging."""
     worker_url = MAMT2_WORKER_URL.rstrip("/")
     endpoint_url = f"{worker_url}/predict"
@@ -146,7 +150,7 @@ def predict_image_via_worker_path(image_path: str) -> dict:
     try:
         started_at = time.perf_counter()
         try:
-            response = requests.post(
+            response = await client.post(
                 endpoint_url,
                 json=payload,
                 timeout=WORKER_TIMEOUT_SECONDS,
@@ -161,12 +165,12 @@ def predict_image_via_worker_path(image_path: str) -> dict:
                 "result_filename",
             ]
             _require_worker_response_keys(data, required_keys)
-        except requests.Timeout as exc:
+        except httpx.TimeoutException as exc:
             result_label = "timeout"
             raise RuntimeError(
                 f"MAMT2 Worker request timed out after {WORKER_TIMEOUT_SECONDS}s: {endpoint_url}"
             ) from exc
-        except requests.RequestException as exc:
+        except httpx.RequestError as exc:
             result_label = "connection_error"
             raise RuntimeError(
                 f"Failed to call MAMT2 Worker at {endpoint_url}. Is the worker service running?"
@@ -185,7 +189,10 @@ def predict_image_via_worker_path(image_path: str) -> dict:
         ).inc()
 
 
-def predict_image_via_worker_file(image_path: str) -> dict:
+async def predict_image_via_worker_file(
+    image_path: str,
+    client: httpx.AsyncClient,
+) -> dict:
     """Upload an image file to the MAMT2 Worker for container-friendly inference."""
     worker_url = MAMT2_WORKER_URL.rstrip("/")
     endpoint_url = f"{worker_url}/predict-file"
@@ -209,7 +216,7 @@ def predict_image_via_worker_file(image_path: str) -> dict:
             }
             started_at = time.perf_counter()
             try:
-                response = requests.post(
+                response = await client.post(
                     endpoint_url,
                     files=files,
                     timeout=WORKER_TIMEOUT_SECONDS,
@@ -224,13 +231,13 @@ def predict_image_via_worker_file(image_path: str) -> dict:
                     "result_image_base64",
                 ]
                 _require_worker_response_keys(data, required_keys)
-            except requests.Timeout as exc:
+            except httpx.TimeoutException as exc:
                 result_label = "timeout"
                 raise RuntimeError(
                     "MAMT2 Worker file request timed out after "
                     f"{WORKER_TIMEOUT_SECONDS}s: {endpoint_url}"
                 ) from exc
-            except requests.RequestException as exc:
+            except httpx.RequestError as exc:
                 result_label = "connection_error"
                 raise RuntimeError(
                     "Failed to call MAMT2 Worker file endpoint at "
@@ -271,7 +278,10 @@ def predict_image_via_worker_file(image_path: str) -> dict:
         ).inc()
 
 
-def predict_image(image_path: str) -> dict:
+async def predict_image(
+    image_path: str,
+    client: httpx.AsyncClient,
+) -> dict:
     if USE_REAL_MAMT2:
-        return predict_image_via_worker_file(image_path)
-    return predict_image_mock(image_path)
+        return await predict_image_via_worker_file(image_path, client)
+    return await asyncio.to_thread(predict_image_mock, image_path)

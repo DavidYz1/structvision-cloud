@@ -90,6 +90,7 @@ frontend/dist/
 
 # Locust result CSV and HTML reports.
 tests/load/results/
+loadtest-results/
 
 # OS
 .DS_Store

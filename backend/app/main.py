@@ -1,13 +1,15 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 import time
 import uuid
 
+import httpx
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
-from app.infer_mamt2 import predict_image
+from app.infer_mamt2 import WORKER_TIMEOUT_SECONDS, predict_image
 from app.metrics import (
     HTTP_REQUEST_DURATION_SECONDS,
     HTTP_REQUESTS_IN_PROGRESS,
@@ -16,7 +18,16 @@ from app.metrics import (
 )
 
 
-app = FastAPI(title="MAMT2 Cloud SHM API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(WORKER_TIMEOUT_SECONDS)
+    ) as worker_client:
+        app.state.worker_client = worker_client
+        yield
+
+
+app = FastAPI(title="MAMT2 Cloud SHM API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -82,8 +93,18 @@ def health_check():
     }
 
 
+@app.get("/healthz")
+async def liveness_check():
+    return {"status": "healthy"}
+
+
+@app.get("/readyz")
+async def readiness_check():
+    return {"status": "ready"}
+
+
 @app.post("/predict")
-async def predict(file: UploadFile = File(...)):
+async def predict(request: Request, file: UploadFile = File(...)):
     suffix = Path(file.filename or "upload.jpg").suffix or ".jpg"
     image_filename = f"{uuid.uuid4().hex}{suffix}"
     image_path = UPLOAD_DIR / image_filename
@@ -92,7 +113,10 @@ async def predict(file: UploadFile = File(...)):
         content = await file.read()
         f.write(content)
 
-    result = predict_image(str(image_path))
+    result = await predict_image(
+        str(image_path),
+        request.app.state.worker_client,
+    )
     result_url = f"/results/{result['result_filename']}"
 
     return {
