@@ -167,6 +167,45 @@ def validate_proxy(
         )
 
 
+def validate_ingress_hosts(
+    default: dict[tuple[str, str], dict[str, Any]],
+    release: dict[tuple[str, str], dict[str, Any]],
+    release_values: dict[str, Any],
+) -> None:
+    ingress_key = ("Ingress", "mamt2-ingress")
+    require(ingress_key in default, "default render must contain the Ingress")
+    require(ingress_key in release, "release render must contain the Ingress")
+
+    default_rules = default[ingress_key]["spec"].get("rules", [])
+    default_host = (
+        default_rules[0].get("host") if len(default_rules) == 1 else None
+    )
+    require(
+        isinstance(default_host, str) and bool(default_host),
+        "non-empty ingress.host must render the host field",
+    )
+    require(
+        "http" in default_rules[0],
+        "host-based Ingress rule must retain the HTTP routes",
+    )
+
+    release_ingress = release_values.get("ingress", {})
+    require(
+        isinstance(release_ingress, dict)
+        and release_ingress.get("host") == "",
+        "release ingress.host must be an explicit empty string",
+    )
+    release_rules = release[ingress_key]["spec"].get("rules", [])
+    require(
+        len(release_rules) == 1 and "host" not in release_rules[0],
+        "empty ingress.host must omit the host field entirely",
+    )
+    require(
+        "http" in release_rules[0],
+        "hostless Ingress rule must retain the HTTP routes",
+    )
+
+
 def validate_raw_alignment(
     helm: dict[tuple[str, str], dict[str, Any]],
 ) -> None:
@@ -366,12 +405,14 @@ def main() -> None:
         dashboard_disabled,
     )
     validate_proxy(default, proxy_enabled)
+    validate_ingress_hosts(default, release, release_values)
     validate_raw_alignment(default)
     validate_release_images(release, release_values)
 
     print(
-        "Manifest validation passed: Helm switches, proxy isolation, "
-        "raw core/optional YAML, Worker downloader logic, and release digests"
+        "Manifest validation passed: Helm switches, Ingress host modes, "
+        "proxy isolation, raw core/optional YAML, Worker downloader logic, "
+        "and release digests"
     )
 
 

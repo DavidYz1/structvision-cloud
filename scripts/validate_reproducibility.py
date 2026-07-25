@@ -98,6 +98,7 @@ def validate_python_dependencies() -> None:
         "backend/requirements.in",
         "backend/requirements.txt",
         "backend/requirements-test.txt",
+        "tests/load/requirements.txt",
         "worker/requirements-docker.in",
         "worker/base-packages-docker.txt",
         "worker/requirements-docker.txt",
@@ -152,6 +153,12 @@ def validate_python_dependencies() -> None:
     require(
         test_lines == ["-r requirements.txt"],
         "Backend test input must include only the hashed runtime lock",
+    )
+
+    load_test_direct = exact_pins("tests/load/requirements.txt")
+    require(
+        load_test_direct == {"locust": "2.42.6"},
+        "load-test dependencies must contain only the pinned Locust version",
     )
 
     worker_direct = exact_pins("worker/requirements-docker.in")

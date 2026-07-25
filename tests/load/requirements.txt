@@ -1,0 +1,2 @@
+# Load-test-only dependency; do not install this file in application images.
+locust==2.42.6
