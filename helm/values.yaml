@@ -162,6 +162,7 @@ worker:
 ingress:
   enabled: true
   className: nginx
+  # Use an empty string for a hostless rule that accepts direct IP traffic.
   host: mamt2.test
   path: /
   pathType: Prefix

@@ -61,7 +61,9 @@ jobs:
           version: v3.16.4
 
       - name: Lint Helm Chart
-        run: helm lint helm
+        run: |
+          helm lint helm
+          helm lint helm -f helm/values-release.yaml
 
       - name: Render Helm validation variants
         shell: bash

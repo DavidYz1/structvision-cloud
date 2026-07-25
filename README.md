@@ -172,6 +172,8 @@ helm upgrade --install structvision helm \
 
 `values-release.yaml` 中的 `sha-<commit>` tag 用于人工识别来源；Deployment 实际使用 `repository@sha256:...`，digest 才是 Kubernetes 拉取的不可变内容标识。三个 GHCR Package 必须保持 public。
 
+云端候选配置将 `ingress.host` 设为空字符串，因此 Ingress rule 完全省略 `host` 字段，可直接通过公网 IP 访问。配置正式域名后，将该值改为域名即可恢复基于 host 的匹配。
+
 默认配置直接访问 Hugging Face，并自动创建模型 PVC、下载和校验权重。默认资源名称保持稳定：`frontend`、`backend`、`mamt2-worker`、`mamt2-config`、`mamt2-ingress`。
 
 Helm 默认渲染 ServiceMonitor；集群尚未安装 Prometheus Operator CRD 时，通过以下参数关闭它：

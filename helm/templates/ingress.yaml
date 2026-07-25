@@ -8,8 +8,12 @@ spec:
   ingressClassName: {{ .Values.ingress.className }}
 
   rules:
-    - host: {{ required "ingress.host is required" .Values.ingress.host | quote }}
+{{- with .Values.ingress.host }}
+    - host: {{ . | quote }}
       http:
+{{- else }}
+    - http:
+{{- end }}
         paths:
           - path: {{ .Values.ingress.path | quote }}
             pathType: {{ .Values.ingress.pathType }}

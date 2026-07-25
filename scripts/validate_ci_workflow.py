@@ -122,6 +122,10 @@ def main() -> None:
         "release digest values and render must be validated in CI",
     )
     require(
+        "helm lint helm -f helm/values-release.yaml" in text,
+        "release values must be included in Helm lint",
+    )
+    require(
         "pip install --require-hashes -r backend/requirements-test.txt" in text,
         "Backend CI must enforce hashes from the dependency lock",
     )

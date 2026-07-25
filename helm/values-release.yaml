@@ -22,3 +22,7 @@ worker:
     tag: sha-89aae47a8e267bb5c8a5060f1d40c999ae039579
     digest: sha256:8d8068e739886d64f9c554c1c849ac27b04d6004b51c57d85f87efc5d09bf1d2
     pullPolicy: IfNotPresent
+
+ingress:
+  # The cloud candidate is reachable by public IP until a domain is configured.
+  host: ""
