@@ -167,19 +167,18 @@ spec:
               path: {{ .Values.worker.startupProbe.path }}
               port: http
             periodSeconds: {{ .Values.worker.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.worker.startupProbe.timeoutSeconds }}
             failureThreshold: {{ .Values.worker.startupProbe.failureThreshold }}
 
           readinessProbe:
-            httpGet:
-              path: {{ .Values.worker.readinessProbe.path }}
+            tcpSocket:
               port: http
             periodSeconds: {{ .Values.worker.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.worker.readinessProbe.timeoutSeconds }}
             failureThreshold: {{ .Values.worker.readinessProbe.failureThreshold }}
 
           livenessProbe:
-            httpGet:
-              path: {{ .Values.worker.livenessProbe.path }}
+            tcpSocket:
               port: http
             periodSeconds: {{ .Values.worker.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.worker.livenessProbe.timeoutSeconds }}
