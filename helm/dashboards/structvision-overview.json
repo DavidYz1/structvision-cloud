@@ -35,7 +35,7 @@
       "id": 2,
       "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
       "targets": [
-        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "editorMode": "code", "expr": "max(up{namespace=\"mamt2\",service=\"backend\"})", "instant": true, "legendFormat": "Backend", "range": false, "refId": "A"}
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "editorMode": "code", "expr": "max(up{namespace=\"__STRUCTVISION_NAMESPACE__\",service=\"backend\"})", "instant": true, "legendFormat": "Backend", "range": false, "refId": "A"}
       ],
       "title": "Backend target status",
       "type": "stat"
@@ -58,7 +58,7 @@
       "id": 3,
       "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
       "targets": [
-        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "editorMode": "code", "expr": "max(up{namespace=\"mamt2\",service=\"mamt2-worker\"})", "instant": true, "legendFormat": "Worker", "range": false, "refId": "A"}
+        {"datasource": {"type": "prometheus", "uid": "prometheus"}, "editorMode": "code", "expr": "max(up{namespace=\"__STRUCTVISION_NAMESPACE__\",service=\"mamt2-worker\"})", "instant": true, "legendFormat": "Worker", "range": false, "refId": "A"}
       ],
       "title": "Worker target status",
       "type": "stat"

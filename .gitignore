@@ -65,6 +65,10 @@ JPEGImages/
 **/annotations/
 **/images/
 **/JPEGImages/
+
+# README and documentation screenshots are versioned assets.
+!docs/images/
+!docs/images/*.png
 outputs/
 worker_outputs/
 
