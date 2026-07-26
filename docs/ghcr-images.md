@@ -1,6 +1,6 @@
 # GHCR 镜像发布
 
-本页描述 v0.9.0 的镜像发布与 Helm 不可变部署机制。当前候选镜像已经通过人工工作流从 `main` 发布并设为 public；尚未创建 `v0.9.0` Git 标签或 GitHub Release。
+本页描述 v1.0.0 的镜像发布与 Helm 不可变部署机制。当前候选镜像已经通过人工工作流从 `main` 发布并设为 public；正式 `v1.0.0` Git 标签和 GitHub Release 仍需在发布确认后创建。
 
 ## 镜像与构建入口
 
@@ -14,12 +14,12 @@ Worker 镜像不包含模型权重。运行时仍由 Kubernetes initContainer �
 
 ## 当前 Helm 候选
 
-`helm/values-release.yaml` 固定同一提交发布的三个候选：
+`helm/values-release.yaml` 固定当前三个候选。Frontend 和 Worker 来自原候选提交，Backend 使用后续异步调用与健康探针修复镜像：
 
 | 组件 | 可读 tag | 不可变 registry digest |
 | --- | --- | --- |
 | Frontend | `sha-89aae47a8e267bb5c8a5060f1d40c999ae039579` | `sha256:6a198d8b6ae506151867bac9eac1e15270ca0bd44ca63b5493d75ef8ca481431` |
-| Backend | `sha-89aae47a8e267bb5c8a5060f1d40c999ae039579` | `sha256:655c7edad8b0c6b11a77e167ae2e520dc32bf58edb94696b95779f01895d9217` |
+| Backend | `sha-de2022fd7027803242de8ad1cf11161b746e1096` | `sha256:6956e04e31ce6378b353f798b3065c4bfbe1efd142ea06b866055aa604290af2` |
 | Worker | `sha-89aae47a8e267bb5c8a5060f1d40c999ae039579` | `sha256:8d8068e739886d64f9c554c1c849ac27b04d6004b51c57d85f87efc5d09bf1d2` |
 
 tag 用于人类识别源码版本；当 digest 非空时，Helm Deployment 实际渲染为 `repository@sha256:...`，tag 不参与 Kubernetes 的镜像内容选择。
@@ -37,7 +37,7 @@ helm upgrade --install structvision helm \
 
 发布新候选后，按以下顺序更新：
 
-1. 从三个 publish matrix Job Summary 取得同一个 40 位 commit tag 和各自 digest；
+1. 从三个 publish matrix Job Summary 取得每个镜像的完整 40 位 commit tag 和 digest；
 2. 确认三个 GHCR Package 为 public，并用 `image@sha256:...` 做只读检查；
 3. 在 `helm/values-release.yaml` 中成组替换三个 `tag` 和 `digest`；
 4. 保持 repository 不变，且不要写入 `latest`；
@@ -59,14 +59,14 @@ sha-<40 位 Git commit SHA>
 
 ### 版本标签发布
 
-推送严格匹配 `v<major>.<minor>.<patch>` 的标签，例如 `v0.9.0`，且标签指向的提交已经合并到 `main` 时，每个镜像同时发布：
+推送严格匹配 `v<major>.<minor>.<patch>` 的标签，例如 `v1.0.0`，且标签指向的提交已经合并到 `main` 时，每个镜像同时发布：
 
 ```text
-v0.9.0
+v1.0.0
 sha-<40 位 Git commit SHA>
 ```
 
-不要在人工候选发布、包可见性检查和干净环境验证完成前创建 `v0.9.0`。发布失败时先修复工作流、权限或构建问题，不要移动或重复创建正式版本标签来试错。
+不要在人工候选发布、包可见性检查和干净环境验证完成前创建 `v1.0.0`。发布失败时先修复工作流、权限或构建问题，不要移动或重复创建正式版本标签来试错。
 
 工作流不接受用户输入的镜像标签，也不发布 `latest`。
 

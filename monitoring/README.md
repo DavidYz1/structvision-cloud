@@ -50,11 +50,15 @@ helm upgrade --install dcgm-exporter nvidia/dcgm-exporter \
 ## Dashboard 声明式加载
 
 应用 Helm Chart 使用 `helm/templates/grafana-dashboard-configmap.yaml` 将
-`helm/dashboards/structvision-overview.json` 封装为 `mamt2` 命名空间中的
-`structvision-grafana-dashboard` ConfigMap。ConfigMap 带有
+`helm/dashboards/structvision-overview.json` 封装为应用 Helm Release
+Namespace 中的 `structvision-grafana-dashboard` ConfigMap。ConfigMap 带有
 `grafana_dashboard: "1"` 标签，Grafana Dashboard Sidecar 跨 Namespace
 发现该标签后，会自动把 JSON 加载到 Grafana。Dashboard 内容变化也会更新
 ConfigMap 的 `checksum/dashboard` annotation。
+
+原始 Dashboard JSON 使用专用 Namespace 占位符；Chart 在生成 ConfigMap
+时将其替换为 `.Release.Namespace`。因此本地 `mamt2`、云端 `structvision`
+或其他 Namespace 无需各自维护 Dashboard 副本。
 
 Dashboard 标识：
 
@@ -151,7 +155,7 @@ kubectl logs --namespace monitoring \
 
 Dashboard 使用的主要 PromQL 包括：
 
-- `up{namespace="mamt2",service="backend"}`、`up{namespace="mamt2",service="mamt2-worker"}` 和 DCGM Exporter 的 `up`：采集目标状态。
+- `up{namespace="<应用 Release Namespace>",service="backend"}`、`up{namespace="<应用 Release Namespace>",service="mamt2-worker"}` 和 DCGM Exporter 的 `up`：采集目标状态。
 - `increase(structvision_backend_worker_calls_total[$__range])`：Backend 到 Worker 的调用结果。
 - `increase(structvision_worker_inference_requests_total[$__range])`：推理请求结果及成功率。
 - `rate(structvision_backend_http_requests_total[$__rate_interval])`：按 route 和 HTTP status 展示请求速率。
@@ -159,6 +163,10 @@ Dashboard 使用的主要 PromQL 包括：
 - `structvision_worker_model_load_duration_seconds_sum/count`：平均模型加载耗时。
 - `structvision_worker_detected_instances_sum/count`：检测实例总量和每次推理平均值。
 - `DCGM_FI_DEV_GPU_UTIL`、`DCGM_FI_DEV_FB_USED`、`DCGM_FI_DEV_GPU_TEMP`、`DCGM_FI_DEV_POWER_USAGE`、`DCGM_FI_DEV_MEM_COPY_UTIL`：GPU 利用率、显存、温度、功耗和显存拷贝利用率。
+
+通过 Helm 发布 Dashboard 时，Backend/Worker target status 查询会自动使用
+应用 Release Namespace。如果绕过 Chart 直接导入原始 JSON，需要先把
+`__STRUCTVISION_NAMESPACE__` 替换为应用所在 Namespace。
 
 ## 卸载
 

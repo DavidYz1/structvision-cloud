@@ -14,6 +14,7 @@ python -m pip install -r tests/load/requirements.txt
 
 ```bash
 export LOCUST_IMAGE_PATH=/绝对路径/测试图片.jpg
+export STRUCTVISION_HOST=http://your-server.example.com
 ```
 
 脚本加载时会检查变量是否存在、路径是否指向普通文件以及文件是否可读。检查失败会在产生压测流量前终止。每个虚拟用户启动时读取一次图片并复用其内容，但每次请求都会重新构造字段名为 `file` 的 `multipart/form-data`。
@@ -26,7 +27,7 @@ export LOCUST_IMAGE_PATH=/绝对路径/测试图片.jpg
 curl --fail-with-body \
   --max-time 120 \
   --form "file=@${LOCUST_IMAGE_PATH}" \
-  http://119.28.156.57/api/predict
+  "${STRUCTVISION_HOST}/api/predict"
 ```
 
 预热成功应返回 HTTP 200、`Content-Type: application/json`，且 JSON 中的 `status` 为 `success`。预热不计入两轮 Locust 结果。
@@ -55,7 +56,7 @@ mkdir -p tests/load/results
 
 LOCUST_IMAGE_PATH=/绝对路径/测试图片.jpg \
 locust -f tests/load/locustfile.py \
-  --host http://119.28.156.57 \
+  --host "${STRUCTVISION_HOST}" \
   --headless \
   --users 30 \
   --spawn-rate 1 \
@@ -72,7 +73,7 @@ locust -f tests/load/locustfile.py \
 ```bash
 LOCUST_IMAGE_PATH=/绝对路径/测试图片.jpg \
 locust -f tests/load/locustfile.py \
-  --host http://119.28.156.57 \
+  --host "${STRUCTVISION_HOST}" \
   --headless \
   --users 50 \
   --spawn-rate 1 \

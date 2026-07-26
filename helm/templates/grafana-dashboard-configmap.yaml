@@ -1,5 +1,5 @@
 {{- if .Values.monitoring.grafanaDashboard.enabled }}
-{{- $dashboard := .Files.Get "dashboards/structvision-overview.json" }}
+{{- $dashboard := .Files.Get "dashboards/structvision-overview.json" | replace "__STRUCTVISION_NAMESPACE__" .Release.Namespace }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

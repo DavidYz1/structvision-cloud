@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 from copy import deepcopy
 from pathlib import Path
@@ -145,6 +146,40 @@ def validate_observability(
         == 2,
         "dashboard switch unexpectedly disabled ServiceMonitors",
     )
+
+
+def validate_dashboard_namespace(
+    resources: dict[tuple[str, str], dict[str, Any]],
+) -> None:
+    dashboard_key = ("ConfigMap", "structvision-grafana-dashboard")
+    dashboard_config = resources[dashboard_key]
+    namespace = dashboard_config["metadata"]["namespace"]
+    dashboard_text = dashboard_config["data"]["structvision-overview.json"]
+
+    require(
+        "__STRUCTVISION_NAMESPACE__" not in dashboard_text,
+        "rendered Dashboard still contains the Namespace placeholder",
+    )
+    try:
+        dashboard = json.loads(dashboard_text)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(
+            "Manifest validation failed: rendered Dashboard is not valid JSON: "
+            f"{exc}"
+        ) from exc
+
+    expressions = {
+        target.get("expr")
+        for panel in dashboard.get("panels", [])
+        for target in panel.get("targets", [])
+    }
+    for service in ("backend", "mamt2-worker"):
+        expected = f'max(up{{namespace="{namespace}",service="{service}"}})'
+        require(
+            expected in expressions,
+            "Dashboard target status query does not use the Helm Release "
+            f"Namespace for service {service}",
+        )
 
 
 def validate_proxy(
@@ -432,6 +467,8 @@ def main() -> None:
         service_monitor_disabled,
         dashboard_disabled,
     )
+    validate_dashboard_namespace(default)
+    validate_dashboard_namespace(release)
     validate_proxy(default, proxy_enabled)
     validate_ingress_hosts(default, release, release_values)
     validate_raw_alignment(default)
@@ -439,8 +476,8 @@ def main() -> None:
 
     print(
         "Manifest validation passed: Helm switches, Ingress host modes, "
-        "proxy isolation, raw core/optional YAML, Worker downloader logic, "
-        "and release digests"
+        "Dashboard Namespace rendering, proxy isolation, raw core/optional "
+        "YAML, Worker downloader logic, and release digests"
     )
 
 
