@@ -162,23 +162,22 @@ spec:
               path: /healthz
               port: http
             periodSeconds: 5
+            timeoutSeconds: 1
             failureThreshold: 60
 
           readinessProbe:
-            httpGet:
-              path: /healthz
+            tcpSocket:
               port: http
-            periodSeconds: 10
-            timeoutSeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
             failureThreshold: 3
 
           livenessProbe:
-            httpGet:
-              path: /healthz
+            tcpSocket:
               port: http
-            periodSeconds: 20
-            timeoutSeconds: 3
-            failureThreshold: 3
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
 
       volumes:
         - name: model-storage

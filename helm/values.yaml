@@ -145,19 +145,18 @@ worker:
   startupProbe:
     path: /healthz
     periodSeconds: 5
+    timeoutSeconds: 1
     failureThreshold: 60
 
   readinessProbe:
-    path: /healthz
-    periodSeconds: 10
-    timeoutSeconds: 3
+    periodSeconds: 5
+    timeoutSeconds: 2
     failureThreshold: 3
 
   livenessProbe:
-    path: /healthz
-    periodSeconds: 20
-    timeoutSeconds: 3
-    failureThreshold: 3
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 6
 
 ingress:
   enabled: true

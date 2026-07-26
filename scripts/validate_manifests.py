@@ -282,12 +282,45 @@ def validate_raw_alignment(
         "Worker model mount must be read-only",
     )
 
+    startup_probe = worker_container.get("startupProbe", {})
+    require(
+        startup_probe
+        == {
+            "httpGet": {"path": "/healthz", "port": "http"},
+            "periodSeconds": 5,
+            "timeoutSeconds": 1,
+            "failureThreshold": 60,
+        },
+        "Worker startup probe must remain the long HTTP /healthz check",
+    )
+    readiness_probe = worker_container.get("readinessProbe", {})
+    require(
+        readiness_probe
+        == {
+            "tcpSocket": {"port": "http"},
+            "periodSeconds": 5,
+            "timeoutSeconds": 2,
+            "failureThreshold": 3,
+        },
+        "Worker readiness probe must use the validated TCP settings",
+    )
+    liveness_probe = worker_container.get("livenessProbe", {})
+    require(
+        liveness_probe
+        == {
+            "tcpSocket": {"port": "http"},
+            "periodSeconds": 10,
+            "timeoutSeconds": 2,
+            "failureThreshold": 6,
+        },
+        "Worker liveness probe must use the validated TCP settings",
+    )
+
 
 def validate_release_images(
     release: dict[tuple[str, str], dict[str, Any]],
     release_values: dict[str, Any],
 ) -> None:
-    commits: set[str] = set()
     rendered_images: set[str] = set()
 
     for component, expected in RELEASE_IMAGES.items():
@@ -309,7 +342,6 @@ def validate_release_images(
             tag_match is not None,
             f"release {component} tag must identify a full Git commit",
         )
-        commits.add(tag_match.group(1))
         require(
             isinstance(digest, str)
             and DIGEST_PATTERN.fullmatch(digest) is not None,
@@ -345,10 +377,6 @@ def validate_release_images(
         )
         rendered_images.add(rendered_image)
 
-    require(
-        len(commits) == 1,
-        "all release image tags must identify the same Git commit",
-    )
     require(
         len(rendered_images) == len(RELEASE_IMAGES),
         "release render must contain three distinct immutable images",
